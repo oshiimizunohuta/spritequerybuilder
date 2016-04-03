@@ -30,6 +30,7 @@ var KEYCONTROLL_HOLDTIME = 16; //キー固定判定時間[fps]
 
 var app;
 var cto = cellhto;
+var sbn = scrollByName;
 
 function SpriteQueryBuilder(){
 	return;
@@ -38,17 +39,22 @@ SpriteQueryBuilder.prototype = {
 	init: function(){
 		this.uiSpriteName = 'sprites';
 		this.sprites = {};
-		this.appColock = 0;
+		this.appClock = 0;
 		this.fileHover = false;
 		this.word8;
 		this.keyControll = new KeyControll();
+		this.pControll = new PointingControll();
 		this.bgPos = {x: 0, y: 0};
 		this.colorSwap = false;
 		this.reverseEnable = true;
 		this.boost = false;
 		this.loadedSprite;
 		this.isLoaded = false;
+		this.scrolls;
 		
+		this.cursor = {
+			palette: {x: 0, y: 0},
+		};
 		this.margin = {
 			loadedSpriteFrame: {x: cto(2), y: cto(2)},
 			spritePalette: {x: cto(3), y: cto(3)},
@@ -67,6 +73,8 @@ SpriteQueryBuilder.prototype = {
 		makeScroll('tmp', false);
 		makeScroll('screen', true);
 		
+		this.scrolls = getScrolls();
+		
 		imageDropFileHandle(scrollByName('screen').canvas, function(img){
 			self.openSpriteImage(img);
 		});
@@ -74,6 +82,7 @@ SpriteQueryBuilder.prototype = {
 		loadImages([['sprites', 8, 8]], function(){
 			self.keyControll.initDefaultKey();
 			self.keyControll.setKey('ext', 16);
+			self.pControll.init(scrollByName('screen'), scrollByName('tmp'));
 
 			self.initSprites();
 			self.initDrawBG();
@@ -106,14 +115,15 @@ SpriteQueryBuilder.prototype = {
 			bg_frame: ms(null, '6 7*16 6|fh;(7|r3 63*16 7|r1)^16!;6|fv 7|fv*16 6|fvh'),
 			icon_upload: ms(null, '0+2:1+2'),
 			arrow_u: ms(10),
+			cursor: ms(5),
 		};
 	},
 	
 	initDrawBG: function(){
-		var bg1 = scrollByName('bg1')
-			, bg2 = scrollByName('bg2')
-			, bg3 = scrollByName('bg3')
-			, scr = scrollByName('screen')
+		var bg1 = this.scrolls.bg1
+			, bg2 = this.scrolls.bg2
+			, bg3 = this.scrolls.bg3
+			, scr = this.scrolls.screen
 			, framePos = this.margin.loadedSpriteFrame
 			, palettePos = this.margin.spritePalette
 			;
@@ -129,6 +139,24 @@ SpriteQueryBuilder.prototype = {
 		bg3.drawSpriteChunk(this.sprites.bg_white, cto(1), 0);
 		bg3.drawSpriteChunk(this.sprites.bg_frame, framePos.x, framePos.y);
 		this.drawWindowBlank();
+		
+	},
+	
+	setMouseMove: function()
+	{
+		var cpos = this.margin.spritePalette
+			, self = this
+		;
+		this.pControll.appendFlickableItem(
+			makeRect([cpos.x, cpos.y, cto(16), cto(16)]),
+			function(item, x, y){
+				var scroll = sbn('sprite');
+				// console.log(x, y);
+				scroll.drawSprite(self.splites.cursor, x, y);
+			}, null
+			, 'palletsel'
+		);
+		
 		
 	},
 	
@@ -148,6 +176,19 @@ SpriteQueryBuilder.prototype = {
 		this.loadedSprite.palette = null;
 		this.isLoaded = true;
 		this.drawLoadedImage();
+		
+		this.setMouseMove();
+	},
+	
+	drawPaletteCursor: function(){
+		var tpos = this.pControll.tapMovePos
+			, c = cto(1)
+		;
+		if(this.appClock % 2 == 0){
+			return;
+		}
+		this.scrolls.sprite.drawSpriteChunk(this.sprites.cursor, tpos.x - (tpos.x % c), tpos.y - (tpos.y % c));
+		
 	},
 	
 	drawWindowBlank: function(){
@@ -174,7 +215,7 @@ SpriteQueryBuilder.prototype = {
 		
 		if(this.isLoaded){return;}
 		
-		b = this.fileHover ? (this.appColock / 2) : (this.appColock / 30);
+		b = this.fileHover ? (this.appClock / 2) : (this.appClock / 30);
 		if((b | 0) % 2 == 0){
 			bg.drawSpriteChunk(this.sprites.icon_upload, framePos.x + cto(8), framePos.y + cto(8));
 			bg.drawSpriteChunk(this.sprites.arrow_u, framePos.x + cto(8.5), framePos.y + cto(10));
@@ -184,7 +225,8 @@ SpriteQueryBuilder.prototype = {
 	draw: function()
 	{
 		this.drawDropFileIcons();
-		this.appColock++;
+		this.drawPaletteCursor();
+		this.appClock++;
 	},
 	
 	keyCheck: function()
