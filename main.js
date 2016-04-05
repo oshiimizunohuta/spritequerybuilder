@@ -30,7 +30,8 @@ var KEYCONTROLL_HOLDTIME = 16; //キー固定判定時間[fps]
 
 var app;
 var cto = cellhto;
-var sbn = scrollByName;
+var SCROLL = null;
+var MR = makeRect;
 
 function SpriteQueryBuilder(){
 	return;
@@ -49,18 +50,24 @@ SpriteQueryBuilder.prototype = {
 		this.reverseEnable = true;
 		this.boost = false;
 		this.loadedSprite;
+		this.selectedCells = [];
+		this.selectedRect = MR('0 0 1 1');
 		this.isLoaded = false;
-		this.scrolls;
+		this.paletteSelect = {start: {x: -1, y: -1}, end: {x: -1, y: -1}, move: {x: -1, y: -1}};
 		
 		this.cursor = {
 			palette: {x: 0, y: 0},
+		};
+		this.rects = {
+			loadedSpriteFrame: MR('2 2 18 18 *8'),
+			spritePalette: MR('3 3 16 16 *8'),
 		};
 		this.margin = {
 			loadedSpriteFrame: {x: cto(2), y: cto(2)},
 			spritePalette: {x: cto(3), y: cto(3)},
 		};
 		
-		var self = this;
+		var self = this, img;
 		
  		//スプライトキャンバス
  		makeScroll('bg1', false);
@@ -73,25 +80,39 @@ SpriteQueryBuilder.prototype = {
 		makeScroll('tmp', false);
 		makeScroll('screen', true);
 		
-		this.scrolls = getScrolls();
+		SCROLL = getScrolls();
 		
 		imageDropFileHandle(scrollByName('screen').canvas, function(img){
 			self.openSpriteImage(img);
 		});
 		
+		
 		loadImages([['sprites', 8, 8]], function(){
+			//TODO test sprite
+			img = new Image();
+			img.src = './img/sprites.png';
+			img.onload = function(){
+				self.openSpriteImage(this);
+			};
+			
 			self.keyControll.initDefaultKey();
 			self.keyControll.setKey('ext', 16);
-			self.pControll.init(scrollByName('screen'), scrollByName('tmp'));
+			self.pControll.init(scrollByName('screen'), scrollByName('bg2'));
+			// self.pControll.init(scrollByName('screen'), scrollByName('bg1'));
 
 			self.initSprites();
 			self.initDrawBG();
 			requestAnimationFrame(main);
+			
+			//TODO test
+			self.setMouseEventPalette();
+
 		});
 	},
 	
 	initSprites: function(){
 		var self = this
+			, k, spr
 			, ms = function(id, opt){
 				// var con = (id == null || opt == null) ? '' : '|';
 				id = id == null ? '' : id;
@@ -104,26 +125,45 @@ SpriteQueryBuilder.prototype = {
 			select_tc: ms(1),
 			select_tr: ms(0, '|fh'),
 			select_ml: ms(1, '|r3'),
-			select_mc: ms(2),
 			select_mr: ms(1, '|r1'),
 			select_bl: ms(0, '|fv'),
 			select_bc: ms(1, '|fv'),
 			select_br: ms(0, '|fvh'),
+			select_single: ms(2),
+			select_pipe_h: ms(3),
+			select_pipe_v: ms(null, '3|r1'),
+			select_cup_t: ms(8),
+			select_cup_r: ms(null, '8|r1'),
+			select_cup_b: ms(null, '8|r2'),
+			select_cup_l: ms(null, '8|r3'),
+			
 			blankbg: ms(3),
 			separate: ms(4, '^30'),
 			bg_white: ms(5, '*31^30'),
 			bg_frame: ms(null, '6 7*16 6|fh;(7|r3 63*16 7|r1)^16!;6|fv 7|fv*16 6|fvh'),
-			icon_upload: ms(null, '0+2:1+2'),
-			arrow_u: ms(10),
+			icon_upload: ms(null, '0+2:6+2'),
+			arrow_u: ms(58),
 			cursor: ms(5),
 		};
+		
+		for(k in this.sprites){
+			if(k.search(/^select_\w*/) == -1){
+				continue;
+			}
+			this.sprites['d1_' + k] = copyCanvasSpriteChunk(this.sprites[k]);
+			this.sprites['d1_' + k] = swapColorSpriteRecursive(this.sprites['d1_' + k], 'set', [188, 188, 188, 255], COLOR_WHITE);
+			this.sprites['d2_' + k] = copyCanvasSpriteChunk(this.sprites[k]);
+			this.sprites['d2_' + k] = swapColorSpriteRecursive(this.sprites['d2_' + k], 'set', [124, 124, 124, 255], COLOR_WHITE);
+		}
+		
+		
 	},
 	
 	initDrawBG: function(){
-		var bg1 = this.scrolls.bg1
-			, bg2 = this.scrolls.bg2
-			, bg3 = this.scrolls.bg3
-			, scr = this.scrolls.screen
+		var bg1 = SCROLL.bg1
+			, bg2 = SCROLL.bg2
+			, bg3 = SCROLL.bg3
+			, scr = SCROLL.screen
 			, framePos = this.margin.loadedSpriteFrame
 			, palettePos = this.margin.spritePalette
 			;
@@ -142,24 +182,6 @@ SpriteQueryBuilder.prototype = {
 		
 	},
 	
-	setMouseMove: function()
-	{
-		var cpos = this.margin.spritePalette
-			, self = this
-		;
-		this.pControll.appendFlickableItem(
-			makeRect([cpos.x, cpos.y, cto(16), cto(16)]),
-			function(item, x, y){
-				var scroll = sbn('sprite');
-				// console.log(x, y);
-				scroll.drawSprite(self.splites.cursor, x, y);
-			}, null
-			, 'palletsel'
-		);
-		
-		
-	},
-	
 	openSpriteImage: function(img){
 		var size = getBuildCellSize(),
 			res = imageResource
@@ -174,25 +196,139 @@ SpriteQueryBuilder.prototype = {
 		this.loadedSprite.image = img;
 		this.loadedSprite.full = makeSprite('loaded_f', 0);
 		this.loadedSprite.palette = null;
+		this.loadedSprite.rect = MR(0, 0, img.wdth, img.height);
+		this.loadedSprite.cellrect = MR(0, 0, tocellh(img.wdth), tocellh(img.height));
 		this.isLoaded = true;
 		this.drawLoadedImage();
 		
-		this.setMouseMove();
+		this.setMouseEventPalette();
 	},
 	
+	i2pos: function(id)
+	{
+		var name = this.loadedSprite.image.name
+			, nums = imageCellsNum(name)
+		;
+		pos = index2Pos(id, nums.w, nums.h);
+		return pos;
+	},
+	
+	setMouseEventPalette: function()
+	{
+		var r = this.rects.spritePalette
+			, self = this
+			, sel = this.paletteSelect
+		;
+		this.pControll.appendTappableItem(
+			MR('0 0 16 16 *8'),
+			function(item, x, y){
+				sel.start.x = x;
+				sel.start.y = y;
+				sel.end.x = -1;
+				sel.end.y = -1;
+			}, function(item, x, y){
+				sel.end.x = x;
+				sel.end.y = y;
+				self.makeSelect();
+			}
+			, 'palletsel'
+		);
+		this.pControll.appendFlickableItem(
+			MR('0 0 16 16 *8'),
+			function(item, x, y){
+				sel.move.x = x;
+				sel.move.y = y;
+			}, function(item, x, y){
+				sel.move.x = -1;
+				sel.move.y = -1;
+			}
+			, 'palletsel'
+		);
+	},
+	
+	makeSelect: function(rect){
+		var img = this.loadedSprite.image
+			, pw = img.width
+			, ph = img.height
+			, sel = this.paletteSelect
+			, size = getBuildCellSize()
+			, x, y, id
+			;
+		
+		this.selectedCells = [];
+		for(y = sel.start.y; y < sel.end.y; y += size.h){
+			for(x = sel.start.x; x < sel.end.x; x += size.w){
+				id =tocellh(x) + (tocellh(y) * tocellh(pw));
+				this.selectedCells.push(id);
+			}
+		}
+		this.selectedRect = MR([tocellh(sel.start.x), tocellh(sel.start.y), tocellh(sel.end.x) + 1, tocellh(sel.end.y) + 1].join(' ') + ' :pos');	},
+	
+
+	//Repeat Draw
 	drawPaletteCursor: function(){
 		var tpos = this.pControll.tapMovePos
-			, c = cto(1)
+		, r = this.rects.spritePalette
+		, scr = SCROLL.bg2
 		;
 		if(this.appClock % 2 == 0){
 			return;
 		}
-		this.scrolls.sprite.drawSpriteChunk(this.sprites.cursor, tpos.x - (tpos.x % c), tpos.y - (tpos.y % c));
+		
+		if(this.rects.spritePalette.isContain(tpos.x + scr.x, tpos.y + scr.y) == false){
+			return;
+		}
+		SCROLL.sprite.drawSpriteChunk(this.sprites.cursor, parseCell(tpos.x) + scr.x, parseCell(tpos.y) + scr.y);
+	},
+	
+	drawSelectedRange: function()
+	{
+		var tpos = this.pControll.tapMovePos
+			, spr, scr = SCROLL.bg2
+			, rect = this.selectedRect
+			, rectlen = rect.h + rect.w
+			, rectxy = rect.x + rect.y
+			, x, y, tdisp = ((this.appClock * (rectlen / 20)) | 0) % rectlen
+			, connect = {u: 0, d: 0, l: 0, r: 0}
+			, s = this.sprites, mode = ''
+			, udlr = {
+				'0101': 'select_tl', '0111': 'select_tc', '0110': 'select_tr',
+				'1101': 'select_ml', '1110': 'select_mr',
+				'1001': 'select_bl', '1011': 'select_bc', '1010': 'select_br',
+				'0000': 'select_single', '1100': 'select_pipe_v', '0011': 'select_pipe_h',
+				'1000': 'select_cup_b', '0100': 'select_cup_t', '0010': 'select_cup_r', '0001': 'select_cup_l', 
+			}
+		;
+		
+		// console.log(tdisp);
+		for(y = rect.y; y < rect.y + rect.h; y++){
+			for(x = rect.x; x < rect.x + rect.w; x++){
+				mode = false;
+				mode = x + y - rectxy == tdisp ? '' : mode;
+				mode = x + y - rectxy + 1 == tdisp ? 'd1_' : mode;
+				mode = x + y - rectxy + 2 == tdisp ? 'd2_' : mode;
+				if(mode === false){
+					continue;
+				}
+				connect.u = rect.isContain(x, y - 1) | 0;
+				connect.d = rect.isContain(x, y + 1) | 0;
+				connect.l = rect.isContain(x - 1, y) | 0;
+				connect.r = rect.isContain(x + 1, y) | 0;
+				spr = '' + connect.u + connect.d + connect.l + connect.r;
+				if(udlr[spr] == null){
+					continue;
+				}else{
+					// console.log(mode + udlr[spr]);
+					SCROLL.sprite.drawSpriteChunk(s[mode + udlr[spr]], cto(x) + scr.x, cto(y) + scr.y);
+				}
+			}
+		}
 		
 	},
 	
+	//One Time Draw
 	drawWindowBlank: function(){
-		var bg3 = scrollByName('bg3')
+		var bg3 = SCROLL.bg3
 			, palettePos = this.margin.spritePalette
 		;
 		bg3.clear(null, makeRect(palettePos.x, palettePos.y, cto(16), cto(16)));
@@ -200,7 +336,7 @@ SpriteQueryBuilder.prototype = {
 	
 	drawLoadedImage: function(){
 		var sprites = this.loadedSprite
-			, bg = scrollByName('bg2')
+			, bg = SCROLL.bg2
 			, pos = this.margin.loadedSpriteFrame
 		;
 		bg.drawSprite(sprites.full, 0, 0);
@@ -208,7 +344,7 @@ SpriteQueryBuilder.prototype = {
 	},
 	
 	drawDropFileIcons: function(){
-		var bg = scrollByName('sprite')
+		var bg = SCROLL.sprite
 			, framePos = {x: cto(2), y: cto(2)}
 			, b
 		;
@@ -226,6 +362,7 @@ SpriteQueryBuilder.prototype = {
 	{
 		this.drawDropFileIcons();
 		this.drawPaletteCursor();
+		this.drawSelectedRange();
 		this.appClock++;
 	},
 	
@@ -289,8 +426,8 @@ document.addEventListener('DOMContentLoaded', function(){
 
 function getBuildCellSize(){
 	var size = {
-		w: document.getElementById('cellsize').value,
-		h: document.getElementById('cellsize').value,
+		w: document.getElementById('cellsize').value | 0,
+		h: document.getElementById('cellsize').value | 0,
 	};
 	return size;
 }
@@ -338,8 +475,8 @@ function imageDropFileHandle(element, func)
 	element.ondragover= ondragoverFile;
 	element.ondragenter= ondragenterFile;
 	element.ondragleave= dragleaveFile;
-	
-
 }
 
-
+function index2Pos(id, w, h){
+	return {x: id % w, y: (id / h) | 0};
+}
