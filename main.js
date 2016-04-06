@@ -52,8 +52,14 @@ SpriteQueryBuilder.prototype = {
 		this.loadedSprite;
 		this.selectedCells = [];
 		this.selectedRect = MR('0 0 1 1');
+		this.selectedSprites;
 		this.isLoaded = false;
 		this.paletteSelect = {start: {x: -1, y: -1}, end: {x: -1, y: -1}, move: {x: -1, y: -1}};
+		this.bgPaletteId = -1;
+		
+		this.isContains = {
+			bgPalette: false,
+		};
 		
 		this.cursor = {
 			palette: {x: 0, y: 0},
@@ -61,10 +67,13 @@ SpriteQueryBuilder.prototype = {
 		this.rects = {
 			loadedSpriteFrame: MR('2 2 18 18 *8'),
 			spritePalette: MR('3 3 16 16 *8'),
+			bgPalette: MR('16 21 3 3 *8'),
 		};
 		this.margin = {
 			loadedSpriteFrame: {x: cto(2), y: cto(2)},
 			spritePalette: {x: cto(3), y: cto(3)},
+			bgPalette: {x: cto(15	), y: cto(20)},
+			selectPalette: {x: cto(2), y: cto(20)}
 		};
 		
 		var self = this, img;
@@ -97,15 +106,15 @@ SpriteQueryBuilder.prototype = {
 			
 			self.keyControll.initDefaultKey();
 			self.keyControll.setKey('ext', 16);
-			self.pControll.init(scrollByName('screen'), scrollByName('bg2'));
-			// self.pControll.init(scrollByName('screen'), scrollByName('bg1'));
+			self.pControll.init(scrollByName('screen'), scrollByName('bg3'));
 
 			self.initSprites();
 			self.initDrawBG();
 			requestAnimationFrame(main);
 			
 			//TODO test
-			self.setMouseEventPalette();
+			// self.setMouseEventPalette();
+			// self.setMouseEventBgPalette();
 
 		});
 	},
@@ -113,6 +122,7 @@ SpriteQueryBuilder.prototype = {
 	initSprites: function(){
 		var self = this
 			, k, spr
+			, swap = swapColorSpriteRecursive
 			, ms = function(id, opt){
 				// var con = (id == null || opt == null) ? '' : '|';
 				id = id == null ? '' : id;
@@ -136,11 +146,14 @@ SpriteQueryBuilder.prototype = {
 			select_cup_r: ms(null, '8|r1'),
 			select_cup_b: ms(null, '8|r2'),
 			select_cup_l: ms(null, '8|r3'),
+			select_bgPalette: ms(5),
 			
-			blankbg: ms(3),
+			blankbg: ms(9, '*32^30'),
 			separate: ms(4, '^30'),
 			bg_white: ms(5, '*31^30'),
-			bg_frame: ms(null, '6 7*16 6|fh;(7|r3 63*16 7|r1)^16!;6|fv 7|fv*16 6|fvh'),
+			frame_loaded: ms(null, '6 7*16 6|fh;(7|r3 63*16 7|r1)^16!;6|fv 7|fv*16 6|fvh'),
+			frame_bgPalette: ms(null, '6 7*3 6|fh;(7|r3 63*3 7|r1)^3!;6|fv 7|fv*3 6|fvh'),
+			frame_selPalette: ms(null, '6 7*8 6|fh;(7|r3 63*8 7|r1)^8!;6|fv 7|fv*8 6|fvh'),
 			icon_upload: ms(null, '0+2:6+2'),
 			arrow_u: ms(58),
 			cursor: ms(5),
@@ -151,11 +164,12 @@ SpriteQueryBuilder.prototype = {
 				continue;
 			}
 			this.sprites['d1_' + k] = copyCanvasSpriteChunk(this.sprites[k]);
-			this.sprites['d1_' + k] = swapColorSpriteRecursive(this.sprites['d1_' + k], 'set', [188, 188, 188, 255], COLOR_WHITE);
+			swap(this.sprites['d1_' + k], 'set', [188, 188, 188, 255], COLOR_WHITE);
 			this.sprites['d2_' + k] = copyCanvasSpriteChunk(this.sprites[k]);
-			this.sprites['d2_' + k] = swapColorSpriteRecursive(this.sprites['d2_' + k], 'set', [124, 124, 124, 255], COLOR_WHITE);
+			swap(this.sprites['d2_' + k], 'set', [124, 124, 124, 255], COLOR_WHITE);
 		}
 		
+		swap(this.sprites.select_bgPalette, 'set', [0, 0, 252, 255], COLOR_WHITE);
 		
 	},
 	
@@ -166,25 +180,32 @@ SpriteQueryBuilder.prototype = {
 			, scr = SCROLL.screen
 			, framePos = this.margin.loadedSpriteFrame
 			, palettePos = this.margin.spritePalette
+			, bgpPos = this.margin.bgPalette
+			, slpPos = this.margin.selectPalette
 			;
 			
 		bg1.clear(COLOR_BLACK);
+		bg1.drawSpriteChunk(this.sprites.blankbg, 0, 0);
 		
-		bg2.clear();
+		bg2.clear(COLOR_BLACK);
 		bg2.x = palettePos.x;
 		bg2.y = palettePos.y;
 		
 		bg3.clear();
 		bg3.drawSpriteChunk(this.sprites.separate, 0, 0);
 		bg3.drawSpriteChunk(this.sprites.bg_white, cto(1), 0);
-		bg3.drawSpriteChunk(this.sprites.bg_frame, framePos.x, framePos.y);
+		bg3.drawSpriteChunk(this.sprites.frame_loaded, framePos.x, framePos.y);
+		
+		bg3.drawSpriteChunk(this.sprites.frame_bgPalette, bgpPos.x, bgpPos.y);
+		bg3.drawSpriteChunk(this.sprites.frame_selPalette, slpPos.x, slpPos.y);
 		this.drawWindowBlank();
 		
 	},
 	
 	openSpriteImage: function(img){
-		var size = getBuildCellSize(),
-			res = imageResource
+		var size = getBuildCellSize()
+			, res = imageResource
+			, r
 		;
 		this.loadedSprite = {};
 		img.name = 'loaded_f';
@@ -196,12 +217,19 @@ SpriteQueryBuilder.prototype = {
 		this.loadedSprite.image = img;
 		this.loadedSprite.full = makeSprite('loaded_f', 0);
 		this.loadedSprite.palette = null;
+		
 		this.loadedSprite.rect = MR(0, 0, img.wdth, img.height);
-		this.loadedSprite.cellrect = MR(0, 0, tocellh(img.wdth), tocellh(img.height));
+		r = MR(0, 0, tocellh(img.wdth), tocellh(img.height));
+		this.loadedSprite.cellrect = r;
 		this.isLoaded = true;
 		this.drawLoadedImage();
 		
+		this.setBgPalette((r.w * r.h) - 1); 
+		
+		this.makeSelect(MR(r.w - 1, r.h - 1, 1, 1));
+		
 		this.setMouseEventPalette();
+		this.setMouseEventBgPalette();
 	},
 	
 	i2pos: function(id)
@@ -213,6 +241,29 @@ SpriteQueryBuilder.prototype = {
 		return pos;
 	},
 	
+	setMouseEventBgPalette: function()
+	{
+		var r = this.rects.bgPalette
+			, self = this
+		;
+		this.pControll.appendTappableItem(
+			r,null, function(item, x, y){
+				self.setBgPalette();
+			}
+			, 'bgsel'
+		);		
+		this.pControll.appendFlickableItem(
+			r,
+			function(item, x, y){
+				console.log(1);
+				self.isContains.bgPalette = true;
+			}, function(item, x, y){
+				self.isContains.bgPalette = false;
+			}
+			, 'bgsel'
+		);
+	},
+	
 	setMouseEventPalette: function()
 	{
 		var r = this.rects.spritePalette
@@ -220,24 +271,24 @@ SpriteQueryBuilder.prototype = {
 			, sel = this.paletteSelect
 		;
 		this.pControll.appendTappableItem(
-			MR('0 0 16 16 *8'),
+			r,
 			function(item, x, y){
-				sel.start.x = x;
-				sel.start.y = y;
+				sel.start.x = x - r.x;
+				sel.start.y = y - r.y;
 				sel.end.x = -1;
 				sel.end.y = -1;
 			}, function(item, x, y){
-				sel.end.x = x;
-				sel.end.y = y;
+				sel.end.x =  x - r.x;
+				sel.end.y =  y - r.y;
 				self.makeSelect();
 			}
 			, 'palletsel'
 		);
 		this.pControll.appendFlickableItem(
-			MR('0 0 16 16 *8'),
+			r,
 			function(item, x, y){
-				sel.move.x = x;
-				sel.move.y = y;
+				sel.move.x =  x - r.x;
+				sel.move.y =  y - r.y;
 			}, function(item, x, y){
 				sel.move.x = -1;
 				sel.move.y = -1;
@@ -246,23 +297,35 @@ SpriteQueryBuilder.prototype = {
 		);
 	},
 	
+	setBgPalette: function(id){
+		this.bgPaletteId = id;
+		this.drawBgPalette();
+	},
+	
 	makeSelect: function(rect){
 		var img = this.loadedSprite.image
 			, pw = img.width
 			, ph = img.height
 			, sel = this.paletteSelect
 			, size = getBuildCellSize()
+			, q = '', sr
 			, x, y, id
 			;
 		
 		this.selectedCells = [];
 		for(y = sel.start.y; y < sel.end.y; y += size.h){
+			// this.selectedCells.push([]);
 			for(x = sel.start.x; x < sel.end.x; x += size.w){
 				id =tocellh(x) + (tocellh(y) * tocellh(pw));
 				this.selectedCells.push(id);
 			}
 		}
-		this.selectedRect = MR([tocellh(sel.start.x), tocellh(sel.start.y), tocellh(sel.end.x) + 1, tocellh(sel.end.y) + 1].join(' ') + ' :pos');	},
+		sr = MR([tocellh(sel.start.x), tocellh(sel.start.y), tocellh(sel.end.x), tocellh(sel.end.y)].join(' ') + ' :pos');
+		this.selectedRect = sr;
+		q = '' + sr.x + '+' + sr.w + ':' + sr.y + '+' + sr.h;
+		
+		this.selectedSprites = makeSpriteQuery(img.name, q);
+	},
 	
 
 	//Repeat Draw
@@ -275,10 +338,12 @@ SpriteQueryBuilder.prototype = {
 			return;
 		}
 		
-		if(this.rects.spritePalette.isContain(tpos.x + scr.x, tpos.y + scr.y) == false){
+		// if(this.rects.spritePalette.isContain(tpos.x + scr.x, tpos.y + scr.y) == false){
+		if(this.rects.spritePalette.isContain(tpos.x, tpos.y) == false){
 			return;
 		}
-		SCROLL.sprite.drawSpriteChunk(this.sprites.cursor, parseCell(tpos.x) + scr.x, parseCell(tpos.y) + scr.y);
+		// SCROLL.sprite.drawSpriteChunk(this.sprites.cursor, parseCell(tpos.x) + scr.x, parseCell(tpos.y) + scr.y);
+		SCROLL.sprite.drawSpriteChunk(this.sprites.cursor, parseCell(tpos.x), parseCell(tpos.y));
 	},
 	
 	drawSelectedRange: function()
@@ -286,7 +351,7 @@ SpriteQueryBuilder.prototype = {
 		var tpos = this.pControll.tapMovePos
 			, spr, scr = SCROLL.bg2
 			, rect = this.selectedRect
-			, rectlen = rect.h + rect.w
+			, rectlen = rect.h + rect.w + 1
 			, rectxy = rect.x + rect.y
 			, x, y, tdisp = ((this.appClock * (rectlen / 20)) | 0) % rectlen
 			, connect = {u: 0, d: 0, l: 0, r: 0}
@@ -326,6 +391,21 @@ SpriteQueryBuilder.prototype = {
 		
 	},
 	
+	drawContainBgPalette: function()
+	{
+		var scr = SCROLL.sprite
+			, pos = this.pControll.tapMovePos
+			, bgr = this.rects.bgPalette
+			, s = this.selectedSprites
+		;
+		
+		if(!bgr.isContain(pos.x, pos.y)){
+			return;
+		}
+		scr.drawSpriteChunk(s, bgr.x + cto(1), bgr.y + cto(1));
+		
+	},
+	
 	//One Time Draw
 	drawWindowBlank: function(){
 		var bg3 = SCROLL.bg3
@@ -339,6 +419,7 @@ SpriteQueryBuilder.prototype = {
 			, bg = SCROLL.bg2
 			, pos = this.margin.loadedSpriteFrame
 		;
+		bg.clear(COLOR_BLACK);
 		bg.drawSprite(sprites.full, 0, 0);
 		
 	},
@@ -358,11 +439,24 @@ SpriteQueryBuilder.prototype = {
 		}
 	},
 	
+	drawBgPalette: function()
+	{
+		var bg = SCROLL.bg3
+			, r = this.rects.bgPalette
+			, selectR = this.selectedRect
+			, loadR = this.rects.spritePalette
+		;
+		// this.bgPaletteSprite
+		bg.drawSpriteChunk(this.sprites.select_bgPalette, cto(selectR.x) + loadR.x, cto(selectR.y) + loadR.y);
+		
+	},
+	
 	draw: function()
 	{
 		this.drawDropFileIcons();
 		this.drawPaletteCursor();
 		this.drawSelectedRange();
+		this.drawContainBgPalette();
 		this.appClock++;
 	},
 	
