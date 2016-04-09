@@ -44,28 +44,38 @@ SpriteQueryBuilder.prototype = {
 		this.fileHover = false;
 		this.word8;
 		this.keyControll = new KeyControll();
-		this.pControll = new PointingControll();
+		this.ppControll = new PointingControll();
+		this.cpControll = new PointingControll();
 		this.bgPos = {x: 0, y: 0};
 		this.colorSwap = false;
 		this.reverseEnable = true;
 		this.boost = false;
 		this.loadedSprite;
 		this.selectedCells = [];
-		this.selectedRect = MR('0 0 1 1');
 		this.selectedSprites;
 		this.selectedSpritesBg;
 		this.isLoaded = false;
 		this.paletteSelect = {start: {x: -1, y: -1}, end: {x: -1, y: -1}, move: {x: -1, y: -1}};
 		this.bgPaletteId = -1;
-		this.bgSelectedRect = MR('0 0 1 1');
+		
+		this.ease = new Ease();
+		
+		this.isPaletteDisplay = true;
+		this.paletteSlideAlign = 0;
 		
 		this.isContains = {
 			bgPalette: false,
+			selectedPalette: false,
 		};
 		
 		this.cursor = {
 			palette: {x: 0, y: 0},
 		};
+		this.cellrects = {
+			bgSelected: MR('0 0 1 1'),
+			paletteSelected: MR('0 0 1 1'),
+		};
+		
 		this.rects = {
 			loadedSpriteFrame: MR('2 2 18 18 *8'),
 			spritePalette: MR('3 3 16 16 *8'),
@@ -76,7 +86,8 @@ SpriteQueryBuilder.prototype = {
 			loadedSpriteFrame: {x: cto(2), y: cto(2)},
 			spritePalette: {x: cto(3), y: cto(3)},
 			bgPalette: {x: cto(15	), y: cto(20)},
-			selectPalette: {x: cto(2), y: cto(20)}
+			selectPalette: {x: cto(2), y: cto(20)},
+			slidePalette: {x: cto(19), y: 0},
 		};
 		
 		var self = this, img;
@@ -98,7 +109,6 @@ SpriteQueryBuilder.prototype = {
 			self.openSpriteImage(img);
 		});
 		
-		
 		loadImages([['sprites', 8, 8]], function(){
 			//TODO test sprite
 			img = new Image();
@@ -109,7 +119,8 @@ SpriteQueryBuilder.prototype = {
 			
 			self.keyControll.initDefaultKey();
 			self.keyControll.setKey('ext', 16);
-			self.pControll.init(scrollByName('screen'), scrollByName('bg3'));
+			self.ppControll.init(scrollByName('screen'), scrollByName('bg3'));
+			self.cpControll.init(scrollByName('screen'), scrollByName('bg1'));
 
 			self.initSprites();
 			self.initDrawBG();
@@ -234,6 +245,7 @@ SpriteQueryBuilder.prototype = {
 		
 		this.setMouseEventPalette();
 		this.setMouseEventBgPalette();
+		this.setMouseEventSelectedSprite();
 	},
 	
 	i2pos: function(id)
@@ -245,18 +257,64 @@ SpriteQueryBuilder.prototype = {
 		return pos;
 	},
 	
+	setMouseEventCanvase: function()
+	{
+		var r = this.rects.selectPalette
+			, self = this
+		;
+		this.ppControll.appendTappableItem(
+			r,null, function(item, x, y){
+				self.drawSelectedSprite();
+			}
+			, 'bgsel'
+		);		
+		this.ppControll.appendFlickableItem(
+			r,
+			function(item, x, y){
+				self.isContains.spritePalette = true;
+			}, function(item, x, y){
+				self.isContains.spritePalette = false;
+			}
+			, 'bgsel'
+		);
+	},
+	
+	setMouseEventSelectedSprite: function()
+	{
+		var r = this.rects.selectPalette
+			, self = this
+		;
+		this.ppControll.appendTappableItem(
+			r,null, function(item, x, y){
+				self.drawSelectedSprite();
+			}
+			, 'bgsel'
+		);		
+		this.ppControll.appendFlickableItem(
+			r,
+			function(item, x, y){
+				self.isContains.spritePalette = true;
+			}, function(item, x, y){
+				self.isContains.spritePalette = false;
+			}
+			, 'bgsel'
+		);
+	},
+	
 	setMouseEventBgPalette: function()
 	{
 		var r = this.rects.bgPalette
 			, self = this
 		;
-		this.pControll.appendTappableItem(
+		this.ppControll.appendTappableItem(
 			r,null, function(item, x, y){
-				self.setBgPalette(self.selectedRect);
+				// self.setBgPalette(self.selectedRect);
+				self.setBgPalette(self.cellrects.paletteSelected);
+				self.drawSelectedBg();
 			}
 			, 'bgsel'
 		);		
-		this.pControll.appendFlickableItem(
+		this.ppControll.appendFlickableItem(
 			r,
 			function(item, x, y){
 				self.isContains.bgPalette = true;
@@ -272,8 +330,10 @@ SpriteQueryBuilder.prototype = {
 		var r = this.rects.spritePalette
 			, self = this
 			, sel = this.paletteSelect
+			, crect
+			, rect
 		;
-		this.pControll.appendTappableItem(
+		this.ppControll.appendTappableItem(
 			r,
 			function(item, x, y){
 				sel.start.x = x - r.x;
@@ -283,11 +343,15 @@ SpriteQueryBuilder.prototype = {
 			}, function(item, x, y){
 				sel.end.x =  x - r.x;
 				sel.end.y =  y - r.y;
-				self.makeSelect();
+				self.makeSelect(sel.start.x, sel.start.y, sel.end.x, sel.end.y);
+				
+				crect = self.cellrects.paletteSelected;
+				rect = self.loadedSprite.cellrect;
+				self.makeSelectedBg(crect.x + (crect.y * rect.w));
 			}
 			, 'palletsel'
 		);
-		this.pControll.appendFlickableItem(
+		this.ppControll.appendFlickableItem(
 			r,
 			function(item, x, y){
 				sel.move.x =  x - r.x;
@@ -300,13 +364,23 @@ SpriteQueryBuilder.prototype = {
 		);
 	},
 	
+	setPaletteSlide: function(pat){
+		var targetPos = ([
+			0,
+			this.margin.slidePalette.x,
+			DISPLAY_WIDTH
+		])[pat]
+		;
+		this.ease.swing(SCROLL.bg3.x, targetPos, 16);
+	},
+	
 	/**
 	 * 背景パレットを決定する
 	 * @param {Rect(cell)} cellrect
 	 */
 	setBgPalette: function(cellrect){
 		this.bgPaletteId = cellrect.x + (cellrect.y * cellrect.w);
-		this.bgSelectedRect = MR(cellrect.x, cellrect.y, cellrect.w, cellrect.h);
+		this.cellrects.bgSelected = MR(cellrect.x, cellrect.y, cellrect.w, cellrect.h);
 		this.drawBgPaletteCursor();
 	},
 	
@@ -322,7 +396,7 @@ SpriteQueryBuilder.prototype = {
 	/**
 	 * 選択したパレットを作成する
 	 */
-	makeSelect: function(){
+	makeSelect: function(sx, sy, ex, ey){
 		var img = this.loadedSprite.image
 			, pw = img.width
 			, ph = img.height
@@ -331,45 +405,65 @@ SpriteQueryBuilder.prototype = {
 			, q = '', sr
 			, x, y, id
 			;
+		sx = sx == null ? sel.start.x : sx;
+		sy = sy == null ? sel.start.y : sy;
+		ex = ex == null ? sel.end.x : ex;
+		ey = ey == null ? sel.end.y : ey;
 		
 		selectedCells = [];
-		for(y = sel.start.y; y < sel.end.y; y += size.h){
-			for(x = sel.start.x; x < sel.end.x; x += size.w){
+		for(y = sy; y < ey; y += size.h){
+			for(x = sx; x < ex; x += size.w){
 				id =tocellh(x) + (tocellh(y) * tocellh(pw));
 				this.selectedCells.push(id);
 			}
 		}
-		sr = MR([tocellh(sel.start.x), tocellh(sel.start.y), tocellh(sel.end.x), tocellh(sel.end.y)].join(' ') + ' :pos');
-		this.selectedRect = sr;
+		sr = MR([tocellh(sx), tocellh(sy), tocellh(ex), tocellh(ey)].join(' ') + ' :pos');
+		this.cellrects.paletteSelected = sr;
+		
 		q = '' + sr.x + '+' + sr.w + ':' + sr.y + '+' + sr.h;
 		
 		this.selectedSprites = makeSpriteQuery(img.name, q);
-		this.makeSelectedBg(tocellh(sel.start.x) + (tocellh(sel.start.y) * tocellh(pw)));
 	},
 
 	//Repeat Draw
 	drawPaletteCursor: function(){
-		var tpos = this.pControll.tapMovePos
-		, r = this.rects.spritePalette
-		, scr = SCROLL.bg2
+		var tpos = this.ppControll.tapMovePos
+			, bg3 = SCROLL.bg3
+			, r = this.rects.spritePalette
 		;
 		if(this.appClock % 2 == 0){
 			return;
 		}
-		
-		// if(this.rects.spritePalette.isContain(tpos.x + scr.x, tpos.y + scr.y) == false){
-		if(this.rects.spritePalette.isContain(tpos.x, tpos.y) == false){
+		if(r.isContain(tpos.x, tpos.y) == false){
 			return;
 		}
-		// SCROLL.sprite.drawSpriteChunk(this.sprites.cursor, parseCell(tpos.x) + scr.x, parseCell(tpos.y) + scr.y);
+		
+		SCROLL.sprite.drawSpriteChunk(this.sprites.cursor, parseCell(bg3.x + tpos.x), parseCell(bg3.y + tpos.y));
+	},
+	
+	drawCanvasCursor: function(){
+		var tpos = this.cpControll.tapMovePos
+			, cv1 = SCROLL.bg1.canvas
+			, cv3 = SCROLL.bg3.canvas
+			, r = MR(0, 0, cv1.width, cv1.height)
+			, bgr = MR(SCROLL.bg3.x, 0, cv3.width, cv3.height)
+		;
+		if(this.appClock % 2 == 0){
+			return;
+		}
+		if(r.isContain(tpos.x, tpos.y) == false || bgr.isContain(tpos.x, tpos.y)){
+			return;
+		}
+		
 		SCROLL.sprite.drawSpriteChunk(this.sprites.cursor, parseCell(tpos.x), parseCell(tpos.y));
 	},
 	
 	drawSelectedRange: function()
 	{
-		var tpos = this.pControll.tapMovePos
+		var tpos = this.ppControll.tapMovePos
 			, spr, scr = SCROLL.bg2
-			, rect = this.selectedRect
+			// , rect = this.selectedRect
+			, rect = this.cellrects.paletteSelected
 			, rectlen = rect.h + rect.w + 1
 			, rectxy = rect.x + rect.y
 			, x, y, tdisp = ((this.appClock * (rectlen / 20)) | 0) % rectlen
@@ -413,14 +507,14 @@ SpriteQueryBuilder.prototype = {
 	drawSelectedPalette: function()
 	{
 		var scr = SCROLL.sprite
-			, pos = this.pControll.tapMovePos
+			, pos = this.ppControll.tapMovePos
 			, r = this.rects.selectPalette
 			, s = this.selectedSprites
 		;
-		if(!r.isContain(pos.x, pos.y)){
+		if(this.appClock % 10 > 0){
 			return;
 		}
-		if(this.appClock % 10 > 0){
+		if(!r.isContain(pos.x, pos.y)){
 			return;
 		}
 		scr.drawSpriteChunk(s, r.x, r.y);
@@ -430,16 +524,35 @@ SpriteQueryBuilder.prototype = {
 	drawContainBgPalette: function()
 	{
 		var scr = SCROLL.sprite
-			, pos = this.pControll.tapMovePos
+			, pos = this.ppControll.tapMovePos
 			, bgr = this.rects.bgPalette
 			, s = this.selectedSpritesBg
 		;
 		
+		if(this.appClock % 10 > 0){
+			return;
+		}
 		if(!bgr.isContain(pos.x, pos.y)){
 			return;
 		}
 		scr.drawSpriteChunk(s, bgr.x, bgr.y);
 		
+	},
+	
+	drawSlidePaletteScroll: function(){
+		var bg3 = SCROLL.bg3
+			, bg2 = SCROLL.bg2
+			, ppos = this.margin.spritePalette.x
+			, spos = this.margin.slidePalette.x
+			, targetPos = ([
+				0,
+				this.margin.slidePalette.x,
+				DISPLAY_WIDTH
+			])[this.paletteSlideAlign]
+		;
+		
+		bg3.x = this.ease.next();
+		bg2.x = bg3.x + ppos;
 	},
 	
 	//One Time Draw
@@ -479,11 +592,29 @@ SpriteQueryBuilder.prototype = {
 	{
 		var bg = SCROLL.bg3
 			, r = this.rects.bgPalette
-			, selectR = this.bgSelectedRect
+			, selectR = this.cellrects.bgSelected
 			, loadR = this.rects.spritePalette
 		;
 		bg.clear(null, loadR);
 		bg.drawSpriteChunk(this.sprites.select_bgPalette, cto(selectR.x) + loadR.x, cto(selectR.y) + loadR.y);
+	},
+	
+	drawSelectedSprite: function()
+	{
+		var bg = SCROLL.bg3
+			, r = this.rects.selectPalette
+		;
+		bg.clear(null, r);
+		bg.drawSpriteChunk(this.selectedSprites, r.x, r.y);
+	},
+	
+	drawSelectedBg: function()
+	{
+		var bg = SCROLL.bg3
+			, r = this.rects.bgPalette
+		;
+		bg.clear(null, r);
+		bg.drawSpriteChunk(this.selectedSpritesBg, r.x, r.y);
 	},
 	
 	draw: function()
@@ -493,6 +624,8 @@ SpriteQueryBuilder.prototype = {
 		this.drawSelectedRange();
 		this.drawContainBgPalette();
 		this.drawSelectedPalette();
+		this.drawSlidePaletteScroll();
+		this.drawCanvasCursor();
 		this.appClock++;
 	},
 	
@@ -522,11 +655,9 @@ SpriteQueryBuilder.prototype = {
 		}
 		
 		if(trig.select){
-			this.colorSwap = !this.colorSwap;
-			this.swapBg(this.colorSwap);
-			if(!this.colorSwap){
-				this.reverseEnable = !this.reverseEnable;
-			}
+			this.isPaletteDisplay = !this.isPaletteDisplay;
+			this.paletteSlideAlign = (this.paletteSlideAlign + 1) % 3;
+			this.setPaletteSlide(this.paletteSlideAlign);
 		}
 	},
 };
