@@ -51,11 +51,17 @@ SpriteQueryBuilder.prototype = {
 		this.reverseEnable = true;
 		this.boost = false;
 		this.loadedSprite;
+		this.spritesEraser;
+		this.canvasPuts; //sprites id put in Canvas Array
 		this.selectedCells = [];
 		this.selectedSprites;
 		this.selectedSpritesBg;
+		this.preRefreshCanvasPos = {x: 0, y: 0};
+		// this.preNegRefreshCanvasPos = {x: 0, y: 0};
+		this.setRefreshCanvasPos = {x: 0, y: 0};
 		this.isLoaded = false;
 		this.paletteSelect = {start: {x: -1, y: -1}, end: {x: -1, y: -1}, move: {x: -1, y: -1}};
+		this.paletteSource = 'image'; //'image' or 'canvas'
 		this.bgPaletteId = -1;
 		
 		this.ease = new Ease();
@@ -74,6 +80,7 @@ SpriteQueryBuilder.prototype = {
 		this.cellrects = {
 			bgSelected: MR('0 0 1 1'),
 			paletteSelected: MR('0 0 1 1'),
+			base: MR(0, 0, tocellh(DISPLAY_WIDTH), tocellh(DISPLAY_HEIGHT)),
 		};
 		
 		this.rects = {
@@ -81,6 +88,7 @@ SpriteQueryBuilder.prototype = {
 			spritePalette: MR('3 3 16 16 *8'),
 			bgPalette: MR('16 21 3 3 *8'),
 			selectPalette: MR('3 21 8 8 *8'),
+			base: MR(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT),
 		};
 		this.margin = {
 			loadedSpriteFrame: {x: cto(2), y: cto(2)},
@@ -90,7 +98,7 @@ SpriteQueryBuilder.prototype = {
 			slidePalette: {x: cto(19), y: 0},
 		};
 		
-		var self = this, img;
+		var self = this, img, size = getBuildCellSize(), bg;
 		
  		//スプライトキャンバス
  		makeScroll('bg1', false);
@@ -103,11 +111,16 @@ SpriteQueryBuilder.prototype = {
 		makeScroll('tmp', false);
 		makeScroll('screen', true);
 		
-		SCROLL = getScrolls();
-		
 		imageDropFileHandle(scrollByName('screen').canvas, function(img){
 			self.openSpriteImage(img);
 		});
+		
+		SCROLL = getScrolls();
+		bg = SCROLL.bg1.canvas;
+		this.canvasPuts = new Int16Array(((bg.width / size.w) | 0) * ((bg.height / size.h) | 0));
+		this.canvasPuts.fill(-1);
+		
+		setResourceFromCanvas(SCROLL.bg1, getBuildCellSize().w, getBuildCellSize().h);
 		
 		loadImages([['sprites', 8, 8]], function(){
 			//TODO test sprite
@@ -165,6 +178,7 @@ SpriteQueryBuilder.prototype = {
 			blankbg: ms(9, '*32^30'),
 			separate: ms(4, '^30'),
 			bg_white: ms(5, '*31^30'),
+			black: ms(63),
 			frame_loaded: ms(null, '6 7*16 6|fh;(7|r3 63*16 7|r1)^16!;6|fv 7|fv*16 6|fvh'),
 			frame_bgPalette: ms(null, '6 7*3 6|fh;(7|r3 63*3 7|r1)^3!;6|fv 7|fv*3 6|fvh'),
 			frame_selPalette: ms(null, '6 7*8 6|fh;(7|r3 63*8 7|r1)^8!;6|fv 7|fv*8 6|fvh'),
@@ -246,6 +260,7 @@ SpriteQueryBuilder.prototype = {
 		this.setMouseEventPalette();
 		this.setMouseEventBgPalette();
 		this.setMouseEventSelectedSprite();
+		this.setMouseEventCanvas();
 	},
 	
 	i2pos: function(id)
@@ -257,25 +272,61 @@ SpriteQueryBuilder.prototype = {
 		return pos;
 	},
 	
-	setMouseEventCanvase: function()
+	setMouseEventCanvas: function()
 	{
-		var r = this.rects.selectPalette
+		var r = this.rects.base
 			, self = this
+			, sel = this.paletteSelect
+			, palRect
 		;
-		this.ppControll.appendTappableItem(
+		//left button
+		this.cpControll.appendTappableItem(
 			r,null, function(item, x, y){
-				self.drawSelectedSprite();
+				palRect = SCROLL.bg3.getRect();
+				if(palRect.isContain(x, y)){return;}
+				self.preRefreshCanvasPos = {x: x, y: y};
 			}
-			, 'bgsel'
+			, 'cvput'
 		);		
-		this.ppControll.appendFlickableItem(
+		this.cpControll.appendFlickableItem(
 			r,
 			function(item, x, y){
-				self.isContains.spritePalette = true;
+				palRect = SCROLL.bg3.getRect();
+				if(palRect.isContain(x, y)){return;}
+				self.preRefreshCanvasPos = {x: x, y: y};
 			}, function(item, x, y){
-				self.isContains.spritePalette = false;
 			}
-			, 'bgsel'
+			, 'cvput'
+		);
+		//right button
+		this.cpControll.appendTappableItem(
+			r, function(item, x, y){
+				sel.start.x = x;
+				sel.start.y = y;
+				sel.end.x = -1;
+				sel.end.y = -1;
+				
+			}, function(item, x, y){
+				sel.end.x = x;
+				sel.end.y = y;
+				palRect = SCROLL.bg3.getRect();
+				if(palRect.isContain(x, y)){return;}
+				self.paletteSource = 'canvas';
+				self.makeSelectByCanvas(sel.start.x, sel.start.y, sel.end.x, sel.end.y);
+			}
+			, 'dropper', 'right'
+		);
+		this.cpControll.appendFlickableItem(
+			r,
+			function(item, x, y){
+				sel.move.x =  x - r.x;
+				sel.move.y =  y - r.y;
+				// self.preRefreshCanvasPos = {x: x, y: y};
+			}, function(item, x, y){
+				sel.move.x = -1;
+				sel.move.y = -1;
+			}
+			, 'dropper', 'right'
 		);
 	},
 	
@@ -343,8 +394,10 @@ SpriteQueryBuilder.prototype = {
 			}, function(item, x, y){
 				sel.end.x =  x - r.x;
 				sel.end.y =  y - r.y;
-				self.makeSelect(sel.start.x, sel.start.y, sel.end.x, sel.end.y);
+				self.paletteSource = 'image';
 				
+				// rect = self.rects.base;
+				self.makeSelect(sel.start.x, sel.start.y, sel.end.x, sel.end.y);
 				crect = self.cellrects.paletteSelected;
 				rect = self.loadedSprite.cellrect;
 				self.makeSelectedBg(crect.x + (crect.y * rect.w));
@@ -404,28 +457,120 @@ SpriteQueryBuilder.prototype = {
 			, size = getBuildCellSize()
 			, q = '', sr
 			, x, y, id
+			, selected = []
 			;
 		sx = sx == null ? sel.start.x : sx;
 		sy = sy == null ? sel.start.y : sy;
 		ex = ex == null ? sel.end.x : ex;
 		ey = ey == null ? sel.end.y : ey;
 		
-		selectedCells = [];
-		for(y = sy; y < ey; y += size.h){
-			for(x = sx; x < ex; x += size.w){
-				id =tocellh(x) + (tocellh(y) * tocellh(pw));
-				this.selectedCells.push(id);
+		sx = tocellh(sx);
+		sy = tocellh(sy);
+		ex = tocellh(ex);
+		ey = tocellh(ey);
+		sr = MR([sx, sy, ex, ey].join(' ') + ' :pos');
+		
+		for(y = sr.y; y < sr.ey; y++){
+			selected.push([]);
+			for(x = sr.x; x < sr.ex; x++){
+				id = x + (y * tocellh(pw));
+				selected[selected.length - 1].push(id);
 			}
 		}
-		sr = MR([tocellh(sx), tocellh(sy), tocellh(ex), tocellh(ey)].join(' ') + ' :pos');
+		this.selectedCells = selected;
 		this.cellrects.paletteSelected = sr;
 		
 		q = '' + sr.x + '+' + sr.w + ':' + sr.y + '+' + sr.h;
 		
 		this.selectedSprites = makeSpriteQuery(img.name, q);
+		this.spritesEraser = makeSpriteQuery(this.uiSpriteName, '63*' + sr.w + '^' + sr.h);
+	},
+	
+	/**
+	 * キャンバスから選択したパレットを作成する
+	 */
+	makeSelectByCanvas: function(sx, sy, ex, ey){
+		var img = this.loadedSprite.image
+			, pw = this.cellrects.base.w
+			, ph = this.cellrects.base.h
+			, sel = this.paletteSelect
+			, size = getBuildCellSize()
+			, q = '', sr
+			, x, y, id
+			, selected = []
+			;
+		sx = sx == null ? sel.start.x : sx;
+		sy = sy == null ? sel.start.y : sy;
+		ex = ex == null ? sel.end.x : ex;
+		ey = ey == null ? sel.end.y : ey;
+		
+		sx = tocellh(sx);
+		sy = tocellh(sy);
+		ex = tocellh(ex);
+		ey = tocellh(ey);
+		sr = MR([sx, sy, ex, ey].join(' ') + ' :pos');
+		
+		for(y = sr.y; y < sr.ey; y++){
+			selected.push([]);
+			for(x = sr.x; x < sr.ex; x++){
+				id = this.canvasPuts[x + (y * pw)];
+				selected[selected.length - 1].push(id);
+			}
+		}
+		
+		this.selectedCells = selected;
+		this.cellrects.paletteSelected = sr;
+		
+		q = '' + sr.x + '+' + sr.w + ':' + sr.y + '+' + sr.h;
+		
+		this.selectedSprites = makeSpriteChunk(img.name, selected);
+		this.spritesEraser = makeSpriteQuery(this.uiSpriteName, '63*' + sr.w + '^' + sr.h);
+	},
+	
+	/**
+	 * キャンバスにスプライトを置く
+	 */
+	putSpritePalette: function(x, y){
+		var bg1 = SCROLL.bg1
+			, tpos = this.cpControll.tapMovePos
+			, cv3 = SCROLL.bg3.canvas
+			, pr = MR(SCROLL.bg3.x, 0, cv3.width, cv3.height)
+			, ppos = {x: parseCell(x), y: parseCell(y)}
+			, cpos = {x: tocellh(x), y: tocellh(y)}
+			, cr = this.cellrects.paletteSelected
+			, selectR = this.selectedCells
+			, j, i
+			, sizeW = (cv3.width / getBuildCellSize().w) | 0
+		;
+		if(pr.isContain(tpos.x, tpos.y)){
+			return;
+		}
+		
+		for(j = 0; j < selectR.length; j++){
+			for(i = 0; i < selectR[j].length; i++){
+				this.canvasPuts[((cpos.y + j) * sizeW) + (cpos.x + i)] = this.selectedCells[j][i];
+			}
+		}
+		bg1.drawSpriteChunk(this.spritesEraser, ppos.x, ppos.y);
+		bg1.drawSpriteChunk(this.selectedSprites, ppos.x, ppos.y);
+		
 	},
 
 	//Repeat Draw
+	drawRefreshCanvas: function(){
+		var pre = this.preRefreshCanvasPos
+			, x = tocellh(pre.x)
+			, y = tocellh(pre.y)
+			, sets = this.setRefreshCanvasPos
+		;
+		if(x == sets.x && y == sets.y){
+			return;
+		}
+		this.putSpritePalette(pre.x, pre.y);
+		sets.x = x;
+		sets.y = y;
+	},
+	
 	drawPaletteCursor: function(){
 		var tpos = this.ppControll.tapMovePos
 			, bg3 = SCROLL.bg3
@@ -461,8 +606,7 @@ SpriteQueryBuilder.prototype = {
 	drawSelectedRange: function()
 	{
 		var tpos = this.ppControll.tapMovePos
-			, spr, scr = SCROLL.bg2
-			// , rect = this.selectedRect
+			, spr, scr = this.paletteSource === 'image' ? SCROLL.bg2 : SCROLL.bg1
 			, rect = this.cellrects.paletteSelected
 			, rectlen = rect.h + rect.w + 1
 			, rectxy = rect.x + rect.y
@@ -478,7 +622,6 @@ SpriteQueryBuilder.prototype = {
 			}
 		;
 		
-		// console.log(tdisp);
 		for(y = rect.y; y < rect.y + rect.h; y++){
 			for(x = rect.x; x < rect.x + rect.w; x++){
 				mode = false;
@@ -496,7 +639,6 @@ SpriteQueryBuilder.prototype = {
 				if(udlr[spr] == null){
 					continue;
 				}else{
-					// console.log(mode + udlr[spr]);
 					SCROLL.sprite.drawSpriteChunk(s[mode + udlr[spr]], cto(x) + scr.x, cto(y) + scr.y);
 				}
 			}
@@ -626,6 +768,7 @@ SpriteQueryBuilder.prototype = {
 		this.drawSelectedPalette();
 		this.drawSlidePaletteScroll();
 		this.drawCanvasCursor();
+		this.drawRefreshCanvas();
 		this.appClock++;
 	},
 	
