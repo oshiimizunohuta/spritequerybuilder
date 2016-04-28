@@ -532,7 +532,7 @@ SpriteQueryBuilder.prototype = {
 	 */
 	putSpritePalette: function(x, y){
 		var bg1 = SCROLL.bg1
-			, tpos = this.cpControll.tapMovePos
+			, tpos = this.cpControll.getMovePos()
 			, cv3 = SCROLL.bg3.canvas
 			, pr = MR(SCROLL.bg3.x, 0, cv3.width, cv3.height)
 			, ppos = {x: parseCell(x), y: parseCell(y)}
@@ -572,7 +572,7 @@ SpriteQueryBuilder.prototype = {
 	},
 	
 	drawPaletteCursor: function(){
-		var tpos = this.ppControll.tapMovePos
+		var tpos = this.ppControll.getMovePos()
 			, bg3 = SCROLL.bg3
 			, r = this.rects.spritePalette
 		;
@@ -587,7 +587,7 @@ SpriteQueryBuilder.prototype = {
 	},
 	
 	drawCanvasCursor: function(){
-		var tpos = this.cpControll.tapMovePos
+		var tpos = this.cpControll.getMovePos()
 			, cv1 = SCROLL.bg1.canvas
 			, cv3 = SCROLL.bg3.canvas
 			, r = MR(0, 0, cv1.width, cv1.height)
@@ -605,7 +605,7 @@ SpriteQueryBuilder.prototype = {
 	
 	drawSelectedRange: function()
 	{
-		var tpos = this.ppControll.tapMovePos
+		var tpos = this.ppControll.getMovePos()
 			, spr, scr = this.paletteSource === 'image' ? SCROLL.bg2 : SCROLL.bg1
 			, rect = this.cellrects.paletteSelected
 			, rectlen = rect.h + rect.w + 1
@@ -649,7 +649,7 @@ SpriteQueryBuilder.prototype = {
 	drawSelectedPalette: function()
 	{
 		var scr = SCROLL.sprite
-			, pos = this.ppControll.tapMovePos
+			, pos = this.ppControll.getMovePos()
 			, r = this.rects.selectPalette
 			, s = this.selectedSprites
 		;
@@ -666,7 +666,7 @@ SpriteQueryBuilder.prototype = {
 	drawContainBgPalette: function()
 	{
 		var scr = SCROLL.sprite
-			, pos = this.ppControll.tapMovePos
+			, pos = this.ppControll.getMovePos()
 			, bgr = this.rects.bgPalette
 			, s = this.selectedSpritesBg
 		;
