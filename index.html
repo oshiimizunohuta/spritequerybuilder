@@ -24,18 +24,31 @@
 				color:white;
 				background:black;
 			}
+			footer p{
+				text-align:center;
+			}
+			h3{
+				margin:1rem auto 0 auto;
+			}
 			#display{
 				margin: 0 auto;
 				text-align: center;
+				display: inline-block;
 			}
 			nav{
-				text-align: center;
-				margin: 0 auto;
+				text-align: right;
+				margin: 0 2rem;
+				display: inline-block;
+				vertical-align: top;
 			}
 			input[type="number"]{
 				font-size:1.6rem;
 				width:4rem;
 				text-align:right;
+			}
+			textarea{
+				height:23rem;
+				width:12rem;
 			}
 		</style>
 			
@@ -51,13 +64,16 @@
 			<header>
 				<h1>Chunklekit SpriteQuery Builder</h1>
 			</header>
-			<nav>
-				区切りサイズ<input type="number" id="cellsize" value="8" min="4", max="256">px
-			</nav>
-
-			<div id="display">
+			<div>
+				<nav>
+					<h3>Cell Size</h3><input type="number" id="cellsize" value="8" min="4", max="256">px
+					<h3>Sprite Query</h3>
+					<textarea placeholder="Sprite Query" ></textarea>
+				</nav>
+	
+				<div id="display">
+				</div>
 			</div>
-
 			<footer>
 				<p>
 					&copy; Copyright  by bitchunk
