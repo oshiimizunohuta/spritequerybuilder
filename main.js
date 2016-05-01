@@ -119,7 +119,6 @@ SpriteQueryBuilder.prototype = {
 		bg = SCROLL.bg1.canvas;
 		this.canvasPuts = new Int16Array(((bg.width / size.w) | 0) * ((bg.height / size.h) | 0));
 		this.canvasPuts.fill(-1);
-		
 		setResourceFromCanvas(SCROLL.bg1, getBuildCellSize().w, getBuildCellSize().h);
 		
 		loadImages([['sprites', 8, 8]], function(){
@@ -253,7 +252,7 @@ SpriteQueryBuilder.prototype = {
 		this.drawLoadedImage();
 		
 		this.makeSelectedBg((r.w * r.h) - 1);
-		this.setBgPalette(MR([r.w - 1, r.h - 1, 1, 1].join(' '))); 
+		this.setBgPalette(MR([r.w - 1, r.h - 1, r.w, r.h].join(' '))); 
 		this.makeSelect();
 		// this.makeSelect(MR([r.w - 1, r.h - 1, 1, 1].join(' ') + ' *8'));
 		
@@ -285,6 +284,7 @@ SpriteQueryBuilder.prototype = {
 				palRect = SCROLL.bg3.getRect();
 				if(palRect.isContain(x, y)){return;}
 				self.preRefreshCanvasPos = {x: x, y: y};
+				self.outputSpriteQueryBatch();
 			}
 			, 'cvput'
 		);		
@@ -294,6 +294,7 @@ SpriteQueryBuilder.prototype = {
 				palRect = SCROLL.bg3.getRect();
 				if(palRect.isContain(x, y)){return;}
 				self.preRefreshCanvasPos = {x: x, y: y};
+				self.outputSpriteQueryBatch();
 			}, function(item, x, y){
 			}
 			, 'cvput'
@@ -321,7 +322,6 @@ SpriteQueryBuilder.prototype = {
 			function(item, x, y){
 				sel.move.x =  x - r.x;
 				sel.move.y =  y - r.y;
-				// self.preRefreshCanvasPos = {x: x, y: y};
 			}, function(item, x, y){
 				sel.move.x = -1;
 				sel.move.y = -1;
@@ -359,8 +359,9 @@ SpriteQueryBuilder.prototype = {
 		;
 		this.ppControll.appendTappableItem(
 			r,null, function(item, x, y){
-				// self.setBgPalette(self.selectedRect);
-				self.setBgPalette(self.cellrects.paletteSelected);
+				var r = self.cellrects.paletteSelected
+					, sr = self.loadedSprite.cellrect;
+				self.setBgPalette(MR(r.x, r.y, sr.w, sr.h));
 				self.drawSelectedBg();
 			}
 			, 'bgsel'
@@ -554,6 +555,82 @@ SpriteQueryBuilder.prototype = {
 		bg1.drawSpriteChunk(this.spritesEraser, ppos.x, ppos.y);
 		bg1.drawSpriteChunk(this.selectedSprites, ppos.x, ppos.y);
 		
+	},
+	
+	getBuildCellsRect: function(){
+		var s = getBuildCellSize()
+			, cv = SCROLL.bg3.canvas;
+		return MR(0, 0, (cv.width / s.w) | 0, (cv.height/ s.h) | 0);
+	},
+
+	convertQuery: function(sprites){
+		var i, j
+			, puts = sprites == null ? this.canvasPuts : sprites, put;
+		return puts.join(' ');
+	},
+	
+	/**
+	 * 書き込み済みの範囲を検出
+	 * @param {Int16Array} puts()
+	 * @param {Rect} rect
+	 */
+	enableRange: function(puts, rect){
+		var range = {}, y, i, j, len
+		;
+		rect = rect == null ? this.getBuildCellsRect() : rect;
+		puts = puts == null ? this.canvasPuts : puts;
+		len = puts.length;
+		for(i = 0; i < len; i++){
+			if(range.t == null && puts[i] > -1){
+				range.t = (i / rect.w) | 0;
+			}
+			if(range.b == null && puts[len - i - 1] > -1){
+				range.b = ((len - i - 1) / rect.w) | 0;
+			}
+		}
+		for(i = 0; i < len; i++){
+			y = ((i % rect.h) * rect.w) + ((i / rect.h) | 0);
+			if(range.l == null && puts[y] > -1){
+				range.l = (i / rect.h) | 0;
+			}
+			if(range.r == null && puts[len - y - 1] > -1){
+				range.r = ((len - i - 1) / rect.h) | 0;
+			}
+		}
+
+		return range;
+	},
+	
+	sliceCanvasPuts: function(puts, range, rect){
+		var ranged, slRect, j, i = 0, start;
+		rect = rect == null ? this.getBuildCellsRect() : rect;
+		slRect = MR([range.l, range.t, range.r, range.b].join(' ') + ' :pos');
+		ranged = new Int16Array(slRect.w * slRect.h);
+		
+		for(j = slRect.y; j < slRect.ey; j++){
+			start = slRect.x + (rect.w * j);
+			ranged.set(puts.slice(start, start + slRect.w), i);
+			i += slRect.w;
+		}
+
+		return new Int16Array(ranged);
+	},
+	
+	outputSpriteQueryBatch: function(){
+		var rect = this.getBuildCellsRect()
+			, range = this.enableRange(this.canvasPuts, rect)
+			, sprites = this.sliceCanvasPuts(this.canvasPuts, range, rect)
+			, bgid = this.bgPaletteId
+		;
+		
+		sprites = sprites.map(function(a, i){
+			return a < 0 ? bgid : a;
+		});
+		
+		//TODO 反映が1回遅れ？
+		//TODO 2重反映
+		console.log(sprites);
+		refreshTextArea(this.convertQuery(sprites));
 	},
 
 	//Repeat Draw
@@ -834,6 +911,10 @@ function getBuildCellSize(){
 		h: document.getElementById('cellsize').value | 0,
 	};
 	return size;
+}
+
+function refreshTextArea(t){
+	document.getElementById('spritequery').innerText = t;
 }
 
 function imageDropFileHandle(element, func)
