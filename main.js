@@ -56,9 +56,12 @@ SpriteQueryBuilder.prototype = {
 		this.selectedCells = [];
 		this.selectedSprites;
 		this.selectedSpritesBg;
-		this.preRefreshCanvasPos = {x: 0, y: 0};
+		this.events ={
+			preRefreshCanvasPos : {x: 0, y: 0}
+			, asSetRefreshCanvasPos : {x: 0, y: 0}
+		};
 		// this.preNegRefreshCanvasPos = {x: 0, y: 0};
-		this.setRefreshCanvasPos = {x: 0, y: 0};
+		// this.setRefreshCanvasPos = {x: 0, y: 0};
 		this.isLoaded = false;
 		this.paletteSelect = {start: {x: -1, y: -1}, end: {x: -1, y: -1}, move: {x: -1, y: -1}};
 		this.paletteSource = 'image'; //'image' or 'canvas'
@@ -283,8 +286,7 @@ SpriteQueryBuilder.prototype = {
 			r,null, function(item, x, y){
 				palRect = SCROLL.bg3.getRect();
 				if(palRect.isContain(x, y)){return;}
-				self.preRefreshCanvasPos = {x: x, y: y};
-				self.outputSpriteQueryBatch();
+				self.events.preRefreshCanvasPos = {x: x, y: y};
 			}
 			, 'cvput'
 		);		
@@ -293,8 +295,7 @@ SpriteQueryBuilder.prototype = {
 			function(item, x, y){
 				palRect = SCROLL.bg3.getRect();
 				if(palRect.isContain(x, y)){return;}
-				self.preRefreshCanvasPos = {x: x, y: y};
-				self.outputSpriteQueryBatch();
+				self.events.preRefreshCanvasPos = {x: x, y: y};
 			}, function(item, x, y){
 			}
 			, 'cvput'
@@ -552,8 +553,8 @@ SpriteQueryBuilder.prototype = {
 				this.canvasPuts[((cpos.y + j) * sizeW) + (cpos.x + i)] = this.selectedCells[j][i];
 			}
 		}
-		bg1.drawSpriteChunk(this.spritesEraser, ppos.x, ppos.y);
-		bg1.drawSpriteChunk(this.selectedSprites, ppos.x, ppos.y);
+		// bg1.drawSpriteChunk(this.spritesEraser, ppos.x, ppos.y);
+		// bg1.drawSpriteChunk(this.selectedSprites, ppos.x, ppos.y);
 		
 	},
 	
@@ -563,10 +564,19 @@ SpriteQueryBuilder.prototype = {
 		return MR(0, 0, (cv.width / s.w) | 0, (cv.height/ s.h) | 0);
 	},
 
-	convertQuery: function(sprites){
+	convertQuery: function(sprites, range){
 		var i, j
-			, puts = sprites == null ? this.canvasPuts : sprites, put;
-		return puts.join(' ');
+			, puts = sprites == null ? this.canvasPuts : sprites, put
+			, slRect = MR([range.l, range.t, range.r, range.b].join(' ') + ' :pos')
+			, q = ''
+			, w = range.r - range.l
+			;
+			for(j = 0; j < slRect.h; j++){
+				i = j * slRect.w;
+				q += puts.slice(i, i + slRect.w).join(' ') + ';';
+			}
+			
+		return q;
 	},
 	
 	/**
@@ -597,11 +607,10 @@ SpriteQueryBuilder.prototype = {
 				range.r = ((len - i - 1) / rect.h) | 0;
 			}
 		}
-
 		return range;
 	},
 	
-	sliceCanvasPuts: function(puts, range, rect){
+	trimCanvasPuts: function(puts, range, rect){
 		var ranged, slRect, j, i = 0, start;
 		rect = rect == null ? this.getBuildCellsRect() : rect;
 		slRect = MR([range.l, range.t, range.r, range.b].join(' ') + ' :pos');
@@ -616,10 +625,102 @@ SpriteQueryBuilder.prototype = {
 		return new Int16Array(ranged);
 	},
 	
+	/**
+	 * イベントをAppで処理
+	 */
+	eventsProcess: function(){
+		var pre = this.events.preRefreshCanvasPos
+			, x = tocellh(pre.x)
+			, y = tocellh(pre.y)
+			, asset = this.events.asSetRefreshCanvasPos
+		;
+		
+		if(x == asset.x && y == asset.y){
+			return;
+		}
+		this.putSpritePalette(pre.x, pre.y);
+		this.drawRefreshCanvas(pre.x, pre.y);
+		this.outputSpriteQueryBatch();
+		asset.x = x;
+		asset.y = y;
+	},
+
+	//One Time Draw
+	drawWindowBlank: function(){
+		var bg3 = SCROLL.bg3
+			, palettePos = this.margin.spritePalette
+		;
+		bg3.clear(null, makeRect(palettePos.x, palettePos.y, cto(16), cto(16)));
+	},
+	
+	drawLoadedImage: function(){
+		var sprites = this.loadedSprite
+			, bg = SCROLL.bg2
+			, pos = this.margin.loadedSpriteFrame
+		;
+		bg.clear(COLOR_BLACK);
+		bg.drawSprite(sprites.full, 0, 0);
+		
+	},
+	
+	drawDropFileIcons: function(){
+		var bg = SCROLL.sprite
+			, framePos = {x: cto(2), y: cto(2)}
+			, b
+		;
+		
+		if(this.isLoaded){return;}
+		
+		b = this.fileHover ? (this.appClock / 2) : (this.appClock / 30);
+		if((b | 0) % 2 == 0){
+			bg.drawSpriteChunk(this.sprites.icon_upload, framePos.x + cto(8), framePos.y + cto(8));
+			bg.drawSpriteChunk(this.sprites.arrow_u, framePos.x + cto(8.5), framePos.y + cto(10));
+		}
+	},
+	
+	drawBgPaletteCursor: function()
+	{
+		var bg = SCROLL.bg3
+			, r = this.rects.bgPalette
+			, selectR = this.cellrects.bgSelected
+			, loadR = this.rects.spritePalette
+		;
+		bg.clear(null, loadR);
+		bg.drawSpriteChunk(this.sprites.select_bgPalette, cto(selectR.x) + loadR.x, cto(selectR.y) + loadR.y);
+	},
+	
+	drawSelectedSprite: function()
+	{
+		var bg = SCROLL.bg3
+			, r = this.rects.selectPalette
+		;
+		bg.clear(null, r);
+		bg.drawSpriteChunk(this.selectedSprites, r.x, r.y);
+	},
+	
+	drawSelectedBg: function()
+	{
+		var bg = SCROLL.bg3
+			, r = this.rects.bgPalette
+		;
+		bg.clear(null, r);
+		bg.drawSpriteChunk(this.selectedSpritesBg, r.x, r.y);
+	},
+
+	drawRefreshCanvas: function(x, y){
+		var bg1 = SCROLL.bg1
+			, ppos = {x: parseCell(x), y: parseCell(y)}
+		;
+		bg1.drawSpriteChunk(this.spritesEraser, ppos.x, ppos.y);
+		bg1.drawSpriteChunk(this.selectedSprites, ppos.x, ppos.y);
+	},
+			
+	//Repeat Draw
+	
 	outputSpriteQueryBatch: function(){
 		var rect = this.getBuildCellsRect()
 			, range = this.enableRange(this.canvasPuts, rect)
-			, sprites = this.sliceCanvasPuts(this.canvasPuts, range, rect)
+			, sprites = this.trimCanvasPuts(this.canvasPuts, range, rect)
 			, bgid = this.bgPaletteId
 		;
 		
@@ -627,26 +728,22 @@ SpriteQueryBuilder.prototype = {
 			return a < 0 ? bgid : a;
 		});
 		
-		//TODO 反映が1回遅れ？
-		//TODO 2重反映
-		console.log(sprites);
-		refreshTextArea(this.convertQuery(sprites));
+		refreshTextArea(this.convertQuery(sprites, range));
 	},
 
-	//Repeat Draw
-	drawRefreshCanvas: function(){
-		var pre = this.preRefreshCanvasPos
-			, x = tocellh(pre.x)
-			, y = tocellh(pre.y)
-			, sets = this.setRefreshCanvasPos
-		;
-		if(x == sets.x && y == sets.y){
-			return;
-		}
-		this.putSpritePalette(pre.x, pre.y);
-		sets.x = x;
-		sets.y = y;
-	},
+	// drawRefreshCanvas: function(){
+		// var pre = this.preRefreshCanvasPos
+			// , x = tocellh(pre.x)
+			// , y = tocellh(pre.y)
+			// , sets = this.setRefreshCanvasPos
+		// ;
+		// if(x == sets.x && y == sets.y){
+			// return;
+		// }
+		// this.putSpritePalette(pre.x, pre.y);
+		// sets.x = x;
+		// sets.y = y;
+	// },
 	
 	drawPaletteCursor: function(){
 		var tpos = this.ppControll.getMovePos()
@@ -773,69 +870,7 @@ SpriteQueryBuilder.prototype = {
 		bg3.x = this.ease.next();
 		bg2.x = bg3.x + ppos;
 	},
-	
-	//One Time Draw
-	drawWindowBlank: function(){
-		var bg3 = SCROLL.bg3
-			, palettePos = this.margin.spritePalette
-		;
-		bg3.clear(null, makeRect(palettePos.x, palettePos.y, cto(16), cto(16)));
-	},
-	
-	drawLoadedImage: function(){
-		var sprites = this.loadedSprite
-			, bg = SCROLL.bg2
-			, pos = this.margin.loadedSpriteFrame
-		;
-		bg.clear(COLOR_BLACK);
-		bg.drawSprite(sprites.full, 0, 0);
 		
-	},
-	
-	drawDropFileIcons: function(){
-		var bg = SCROLL.sprite
-			, framePos = {x: cto(2), y: cto(2)}
-			, b
-		;
-		
-		if(this.isLoaded){return;}
-		
-		b = this.fileHover ? (this.appClock / 2) : (this.appClock / 30);
-		if((b | 0) % 2 == 0){
-			bg.drawSpriteChunk(this.sprites.icon_upload, framePos.x + cto(8), framePos.y + cto(8));
-			bg.drawSpriteChunk(this.sprites.arrow_u, framePos.x + cto(8.5), framePos.y + cto(10));
-		}
-	},
-	
-	drawBgPaletteCursor: function()
-	{
-		var bg = SCROLL.bg3
-			, r = this.rects.bgPalette
-			, selectR = this.cellrects.bgSelected
-			, loadR = this.rects.spritePalette
-		;
-		bg.clear(null, loadR);
-		bg.drawSpriteChunk(this.sprites.select_bgPalette, cto(selectR.x) + loadR.x, cto(selectR.y) + loadR.y);
-	},
-	
-	drawSelectedSprite: function()
-	{
-		var bg = SCROLL.bg3
-			, r = this.rects.selectPalette
-		;
-		bg.clear(null, r);
-		bg.drawSpriteChunk(this.selectedSprites, r.x, r.y);
-	},
-	
-	drawSelectedBg: function()
-	{
-		var bg = SCROLL.bg3
-			, r = this.rects.bgPalette
-		;
-		bg.clear(null, r);
-		bg.drawSpriteChunk(this.selectedSpritesBg, r.x, r.y);
-	},
-	
 	draw: function()
 	{
 		this.drawDropFileIcons();
@@ -845,7 +880,7 @@ SpriteQueryBuilder.prototype = {
 		this.drawSelectedPalette();
 		this.drawSlidePaletteScroll();
 		this.drawCanvasCursor();
-		this.drawRefreshCanvas();
+		// this.drawRefreshCanvas();
 		this.appClock++;
 	},
 	
@@ -886,6 +921,7 @@ function main(){
 	var scrolls = getScrolls();
 	app.keyCheck();
 	keyStateCheck();
+	app.eventsProcess();
 	app.draw();
 	drawCanvasStacks();
 	
