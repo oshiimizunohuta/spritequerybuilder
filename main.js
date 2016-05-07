@@ -39,6 +39,11 @@ function SpriteQueryBuilder(){
 SpriteQueryBuilder.prototype = {
 	init: function(){
 		this.uiSpriteName = 'sprites';
+		this.debugCount = 0;
+		this.debugCountMax = 1;
+		this.debugCursorPos = {x: 0, y: 0};
+		//TODO debugでcompressをみてみよう
+		
 		this.sprites = {};
 		this.appClock = 0;
 		this.fileHover = false;
@@ -57,9 +62,11 @@ SpriteQueryBuilder.prototype = {
 		this.selectedSprites;
 		this.selectedSpritesBg;
 		this.events ={
-			preRefreshCanvasPos : {x: 0, y: 0}
-			, asSetRefreshCanvasPos : {x: 0, y: 0}
+			preRefreshCanvasPos : {x: -1, y: -1}
+			, asSetRefreshCanvasPos : {x: -1, y: -1}
 		};
+		this.compressQueries = {};
+		this.sortedQueries = [];
 		// this.preNegRefreshCanvasPos = {x: 0, y: 0};
 		// this.setRefreshCanvasPos = {x: 0, y: 0};
 		this.isLoaded = false;
@@ -132,7 +139,7 @@ SpriteQueryBuilder.prototype = {
 				self.openSpriteImage(this);
 			};
 			
-			self.keyControll.initDefaultKey();
+			self.keyControll.initCommonKey();
 			self.keyControll.setKey('ext', 16);
 			self.ppControll.init(scrollByName('screen'), scrollByName('bg3'));
 			self.cpControll.init(scrollByName('screen'), scrollByName('bg1'));
@@ -315,6 +322,7 @@ SpriteQueryBuilder.prototype = {
 				if(palRect.isContain(x, y)){return;}
 				self.paletteSource = 'canvas';
 				self.makeSelectByCanvas(sel.start.x, sel.start.y, sel.end.x, sel.end.y);
+				self.events.preRefreshCanvasPos = {x: -1, y: -1};
 			}
 			, 'dropper', 'right'
 		);
@@ -398,7 +406,6 @@ SpriteQueryBuilder.prototype = {
 				sel.end.y =  y - r.y;
 				self.paletteSource = 'image';
 				
-				// rect = self.rects.base;
 				self.makeSelect(sel.start.x, sel.start.y, sel.end.x, sel.end.y);
 				crect = self.cellrects.paletteSelected;
 				rect = self.loadedSprite.cellrect;
@@ -460,6 +467,7 @@ SpriteQueryBuilder.prototype = {
 			, q = '', sr
 			, x, y, id
 			, selected = []
+			, comp = this.compressQueries
 			;
 		sx = sx == null ? sel.start.x : sx;
 		sy = sy == null ? sel.start.y : sy;
@@ -483,9 +491,12 @@ SpriteQueryBuilder.prototype = {
 		this.cellrects.paletteSelected = sr;
 		
 		q = '' + sr.x + '+' + sr.w + ':' + sr.y + '+' + sr.h;
-		
 		this.selectedSprites = makeSpriteQuery(img.name, q);
 		this.spritesEraser = makeSpriteQuery(this.uiSpriteName, '63*' + sr.w + '^' + sr.h);
+		
+		comp[q] = q in comp ? comp[q] : {rect: sr, sprites: this.convertCanvasPuts(this.selectedSprites)};
+		this.sortedQueries = this.sortQueries(comp);
+		console.log(q, comp, this.sortedQueries);
 	},
 	
 	/**
@@ -527,6 +538,7 @@ SpriteQueryBuilder.prototype = {
 		
 		this.selectedSprites = makeSpriteChunk(img.name, selected);
 		this.spritesEraser = makeSpriteQuery(this.uiSpriteName, '63*' + sr.w + '^' + sr.h);
+		console.log(this.compressQueries, this.sortedQueries);
 	},
 	
 	/**
@@ -563,11 +575,25 @@ SpriteQueryBuilder.prototype = {
 			, cv = SCROLL.bg3.canvas;
 		return MR(0, 0, (cv.width / s.w) | 0, (cv.height/ s.h) | 0);
 	},
+	
+	sortQueries: function(target){
+		var keys = Object.keys(target)
+			, ex = /[0-9]+\+([0-9]+)\:[0-9]+\+([0-9]+)/;
+		
+		keys = keys.sort(function(a, b){
+			var ap = ex.exec(a), bp = ex.exec(b);
+			ap = ap[0] === null ? 1 : (ap[1] | 0) + (ap[2] | 0);
+			bp = bp[0] === null ? 1 : (bp[1] | 0) + (bp[2] | 0);
+			return ap < bp;
+		});
+		return keys;
+	},
 
 	convertQuery: function(sprites, range){
 		var i, j
 			, puts = sprites == null ? this.canvasPuts : sprites, put
 			, slRect = MR([range.l, range.t, range.r, range.b].join(' ') + ' :pos')
+			, comp = this.compressQueries
 			, q = ''
 			, w = range.r - range.l
 			;
@@ -581,8 +607,8 @@ SpriteQueryBuilder.prototype = {
 	
 	/**
 	 * 書き込み済みの範囲を検出
-	 * @param {Int16Array} puts()
-	 * @param {Rect} rect
+	 * @param {Int16Array} puts=canvasPuts
+	 * @param {Rect} rect=buildCellRect
 	 */
 	enableRange: function(puts, rect){
 		var range = {}, y, i, j, len
@@ -625,6 +651,104 @@ SpriteQueryBuilder.prototype = {
 		return new Int16Array(ranged);
 	},
 	
+	convertCanvasPuts: function(sprChunk){
+		var i, j, conv = [], w, h, spr;
+		for(j = 0; j < sprChunk.length; j++){
+			for(i = 0; i < sprChunk[j].length; i++){
+				spr = sprChunk[j][i];
+				conv.push(spr.id);
+			}
+		}
+		return new Int16Array(conv);
+	} ,
+	
+	searchDistantPair: function(puts, search, ignore){
+		
+	},
+
+	searchCircumPair: function(puts, search){
+		
+	},
+	
+	//TODO 要検証
+	compressQuery: function(){
+		var comp = this.compressQueries
+			, sorted = this.sortedQueries
+			, puts = this.canvasPuts
+			, finded = {}, find
+			, rect = this.getBuildCellsRect()
+			, range = this.enableRange(puts, rect)
+			, erect = MR([range.l, range.t, range.r, range.b].join(' ') + ' :pos')
+			// , sprites = this.trimCanvasPuts(puts, range, rect)
+			, cw = range.r - range.l
+			, i, f, q, r, s, x, y, pcnt = 0
+			, compare = function(s, c, sx, sy){
+				var x = 0, y = 0, w = c.w, h = c.h, putW = rect.w;
+				for(y = 0; y < h; y++){
+					for(x = 0; x < w; x++){
+						if(puts[(sx + x) + ((sy + y) * putW)] != s[x + (y * w)]){
+							return null;
+						}
+					}
+				}
+				return MR(sx, sy, c.w, c.h);
+			}
+			, overlap = function(finded, r){
+				var f, len, i, cr;
+				for(f in finded){
+					cr = finded[f];
+					len = cr.length;
+					for(i = 0; i < len; i++){
+						if(cr[i] == null){
+							continue;
+						}
+						if(cr[i].isOverlap(r)){
+							return true;
+						}
+					}
+				}
+				return false;
+			}
+		;
+		
+		for(i = 0; i < sorted.length; i++){
+			q = sorted[i];
+			//圧縮句のrectを取得
+			r = comp[q].rect;
+			s = comp[q].sprites;
+			//有効範囲から合致する全ての位置をrectで探す
+			finded[q] = [];
+			for(y = erect.y; y < erect.ey; y++){
+				for(x = erect.x; x < erect.ex; x++){
+					find = compare(s, r, x, y);
+					
+					//既に検出済みの位置・範囲を除外
+					if(find == null || overlap(finded, find)){
+						continue;
+					}
+					// console.log(find, x, y);
+					//検出済みに追加
+					finded[q].push(find);
+					if(this.debugCount == pcnt){
+						this.debugCursorPos.x = x;
+						this.debugCursorPos.y = y;
+					}
+					pcnt++;
+				}
+			}
+		}
+		for(q in finded){
+			if(finded[q].length == 0){
+				console.log('del '  + q);
+				delete comp[q];
+				delete finded[q];
+			}
+		}
+		this.debugCountMax = pcnt > 0 ? pcnt : 1;
+		this.sortedQueries = this.sortQueries(comp);
+		console.log(finded);
+	},
+	
 	/**
 	 * イベントをAppで処理
 	 */
@@ -638,7 +762,13 @@ SpriteQueryBuilder.prototype = {
 		if(x == asset.x && y == asset.y){
 			return;
 		}
+		if(pre.x < 0 || pre.y < 0){
+			asset.x = pre.x;
+			asset.y = pre.y;
+			return;
+		}
 		this.putSpritePalette(pre.x, pre.y);
+		this.compressQuery();
 		this.drawRefreshCanvas(pre.x, pre.y);
 		this.outputSpriteQueryBatch();
 		asset.x = x;
@@ -731,20 +861,6 @@ SpriteQueryBuilder.prototype = {
 		refreshTextArea(this.convertQuery(sprites, range));
 	},
 
-	// drawRefreshCanvas: function(){
-		// var pre = this.preRefreshCanvasPos
-			// , x = tocellh(pre.x)
-			// , y = tocellh(pre.y)
-			// , sets = this.setRefreshCanvasPos
-		// ;
-		// if(x == sets.x && y == sets.y){
-			// return;
-		// }
-		// this.putSpritePalette(pre.x, pre.y);
-		// sets.x = x;
-		// sets.y = y;
-	// },
-	
 	drawPaletteCursor: function(){
 		var tpos = this.ppControll.getMovePos()
 			, bg3 = SCROLL.bg3
@@ -775,6 +891,26 @@ SpriteQueryBuilder.prototype = {
 		}
 		
 		SCROLL.sprite.drawSpriteChunk(this.sprites.cursor, parseCell(tpos.x), parseCell(tpos.y));
+	},
+	
+	drawDebugCanvasCursor: function(){
+		var rect = this.getBuildCellsRect()
+			, cv1 = SCROLL.bg1.canvas
+			, cv3 = SCROLL.bg3.canvas
+			, r = MR(0, 0, cv1.width, cv1.height)
+			, bgr = MR(SCROLL.bg3.x, 0, cv3.width, cv3.height)
+			// , range = this.enableRange(puts, rect)
+			// , erect = MR([range.l, range.t, range.r, range.b].join(' ') + ' :pos')
+			, tpos = this.debugCursorPos
+		;
+		if(this.appClock % 2 == 0){
+			return;
+		}
+		if(r.isContain(tpos.x, tpos.y) == false || bgr.isContain(tpos.x, tpos.y)){
+			return;
+		}
+		
+		SCROLL.sprite.drawSpriteChunk(this.sprites.cursor, cto(tpos.x), cto(tpos.y));
 	},
 	
 	drawSelectedRange: function()
@@ -880,6 +1016,7 @@ SpriteQueryBuilder.prototype = {
 		this.drawSelectedPalette();
 		this.drawSlidePaletteScroll();
 		this.drawCanvasCursor();
+		this.drawDebugCanvasCursor();
 		// this.drawRefreshCanvas();
 		this.appClock++;
 	},
@@ -888,7 +1025,8 @@ SpriteQueryBuilder.prototype = {
 	{
 		var cont = this.keyControll
 			, state = cont.getState(['up', 'down', 'left', 'right', 'ext'])
-			, trig = cont.getTrig(['select'])
+			, trig = cont.getTrig(['select', '>', '<'])
+			, hold = cont.getHold(['select', '>', '<'])
 		;
 		if(state.left){
 			this.bgPos.x -= 1 + this.boost;
@@ -909,6 +1047,14 @@ SpriteQueryBuilder.prototype = {
 			this.boost = false;
 		}
 		
+		if(trig['>'] || hold['>']){
+			this.debugCount = (this.debugCount + 1) % this.debugCountMax;
+			this.compressQuery();
+		}
+		if(trig['<'] || hold['<']){
+			this.debugCount = (this.debugCount + this.debugCountMax - 1) % this.debugCountMax;
+			this.compressQuery();
+		}
 		if(trig.select){
 			this.isPaletteDisplay = !this.isPaletteDisplay;
 			this.paletteSlideAlign = (this.paletteSlideAlign + 1) % 3;
