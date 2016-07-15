@@ -41,14 +41,29 @@
 				display: inline-block;
 				vertical-align: top;
 			}
-			input[type="number"]{
-				font-size:1.6rem;
-				width:4rem;
+			input[type="text"]{
+				font-size:1.4rem;
+				width:2.5rem;
 				text-align:right;
 			}
 			textarea{
 				height:23rem;
 				width:12rem;
+			}
+			.inlineblock{
+				display:inline-block;
+				margin-left: 0.8rem;
+				text-align:right;
+			}
+			#cell_x{
+				background:#A4E4FC;
+				color:#0078F8;
+				border:none;
+			}
+			#cell_y{
+				background:#B8F8B8;
+				color:#00A800;
+				border:none;
 			}
 		</style>
 			
@@ -66,7 +81,16 @@
 			</header>
 			<div>
 				<nav>
-					<h3>Cell Size</h3><input type="number" id="cellsize" value="8" min="4", max="256">px
+					<div>
+						<div class="inlineblock">
+							<h3>Cell Pos</h3>
+							x<input type="text" id="cell_x" readonly="readonly" value="0"/>
+							y<input type="text" id="cell_y" readonly="readonly" value="0"/>
+						</div>
+						<div class="inlineblock">
+							<h3>Cell Size</h3><input type="text" id="cellsize" value="8" min="4", max="256" />px
+						</div>
+					</div>
 					<h3>Sprite Query</h3>
 					<textarea id="spritequery" placeholder="Sprite Query" ></textarea>
 				</nav>

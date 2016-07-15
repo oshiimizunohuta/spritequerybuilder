@@ -7,12 +7,12 @@
 //canvas
 var VIEWMULTI = 2;//キャンバス基本サイズ拡大倍数
 var CHIPCELL_SIZE = 8;//基本サイズ1辺り 8*8
-var DISPLAY_WIDTH = 256;//キャンバス表示基本幅
+var DISPLAY_WIDTH = 320;//キャンバス表示基本幅
 var DISPLAY_HEIGHT = 240;//キャンバス表示基本高
 var UI_SCREEN_ID = 'screen'; //イベント取得・拡大表示用
 
 var SCROLL_MAX_SPRITES_DRAW = 32; //スプライト最大描画数
-var SCROLL_MAX_SPRITES_STACK = 2048; //スプライト最大スタック数
+var SCROLL_MAX_SPRITES_STACK = 4048; //スプライト最大スタック数
 
 var IMAGE_DIR = './img/'; //画像ファイル読み込みパス(URLフルパスも可)
 
@@ -42,6 +42,7 @@ SpriteQueryBuilder.prototype = {
 		this.debugCount = 0;
 		this.debugCountMax = 1;
 		this.debugCursorPos = {x: 0, y: 0};
+		this.debugDirection = false;
 		//TODO debugでcompressをみてみよう
 		
 		this.sprites = {};
@@ -58,9 +59,13 @@ SpriteQueryBuilder.prototype = {
 		this.loadedSprite;
 		this.spritesEraser;
 		this.canvasPuts; //sprites id put in Canvas Array
+		this.canvasDirections; //sprites direction put in Canvas Array
 		this.selectedCells = [];
+		this.selectedCellsDir = [];
 		this.selectedSprites;
+		this.selectedSpritesSingle;
 		this.selectedSpritesBg;
+		this.selectedDirection = {rot: 0, flip_h: 0, flip_v: 0};
 		this.events ={
 			preRefreshCanvasPos : {x: -1, y: -1}
 			, asSetRefreshCanvasPos : {x: -1, y: -1}
@@ -97,19 +102,27 @@ SpriteQueryBuilder.prototype = {
 		this.rects = {
 			loadedSpriteFrame: MR('2 2 18 18 *8'),
 			spritePalette: MR('3 3 16 16 *8'),
-			bgPalette: MR('16 21 3 3 *8'),
+			// bgPalette: MR('16 21 3 3 *8'),
+			directionPalette: MR('12 21 3 3 *8'),
+			directionButtons: MR('16 21 2 8 *8'),
+			directionR: MR('16 21 2 2 *8'),
+			directionFV: MR('16 23 2 2 *8'),
+			directionFH: MR('16 25 2 2 *8'),
+			directionTP: MR('16 27 2 2 *8'),
 			selectPalette: MR('3 21 8 8 *8'),
+			selectedSingle: MR('13 22 1 1 *8'),
 			base: MR(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT),
 		};
 		this.margin = {
 			loadedSpriteFrame: {x: cto(2), y: cto(2)},
 			spritePalette: {x: cto(3), y: cto(3)},
-			bgPalette: {x: cto(15	), y: cto(20)},
+			// bgPalette: {x: cto(15	), y: cto(20)},
+			directionButtons: {x: cto(15), y: cto(20)},
 			selectPalette: {x: cto(2), y: cto(20)},
 			slidePalette: {x: cto(19), y: 0},
 		};
 		
-		var self = this, img, size = getBuildCellSize(), bg;
+		var self = this, img, size = getBuildCellSize(), bg, putlen;
 		
  		//スプライトキャンバス
  		makeScroll('bg1', false);
@@ -128,8 +141,12 @@ SpriteQueryBuilder.prototype = {
 		
 		SCROLL = getScrolls();
 		bg = SCROLL.bg1.canvas;
-		this.canvasPuts = new Int16Array(((bg.width / size.w) | 0) * ((bg.height / size.h) | 0));
+		putlen = ((bg.width / size.w) | 0) * ((bg.height / size.h) | 0);
+		this.canvasPuts = new Int16Array(putlen);
 		this.canvasPuts.fill(-1);
+		this.canvasDirections = [];
+		this.canvasDirections[putlen - 1] = '';
+		this.canvasDirections.fill('');
 		setResourceFromCanvas(SCROLL.bg1, getBuildCellSize().w, getBuildCellSize().h);
 		
 		loadImages([['sprites', 8, 8]], function(){
@@ -159,6 +176,7 @@ SpriteQueryBuilder.prototype = {
 	initSprites: function(){
 		var self = this
 			, k, spr
+			, glay_l = [188, 188, 188, 255], glay_d = [124, 124, 124, 255]
 			, swap = swapColorSpriteRecursive
 			, ms = function(id, opt){
 				// var con = (id == null || opt == null) ? '' : '|';
@@ -186,15 +204,35 @@ SpriteQueryBuilder.prototype = {
 			select_bgPalette: ms(5),
 			select_spriteChunk: ms(5),
 			
-			blankbg: ms(9, '*32^30'),
+			blankbg: ms(9, '*' + this.cellrects.base.w + '^' + this.cellrects.base.h),
+			blank: ms(9),
 			separate: ms(4, '^30'),
-			bg_white: ms(5, '*31^30'),
+			bg_white: ms(5, '*' + (this.cellrects.base.w - 1) + '^' + this.cellrects.base.h),
 			black: ms(63),
 			frame_loaded: ms(null, '6 7*16 6|fh;(7|r3 63*16 7|r1)^16!;6|fv 7|fv*16 6|fvh'),
-			frame_bgPalette: ms(null, '6 7*3 6|fh;(7|r3 63*3 7|r1)^3!;6|fv 7|fv*3 6|fvh'),
+			// frame_bgPalette: ms(null, '6 7*3 6|fh;(7|r3 63*3 7|r1)^3!;6|fv 7|fv*3 6|fvh'),
+			frame_bgPalette: ms(null, '6 7*2 6|fh;(7|r3 63*2 7|r1)^8!;6|fv 7|fv*2 6|fvh'),
 			frame_selPalette: ms(null, '6 7*8 6|fh;(7|r3 63*8 7|r1)^8!;6|fv 7|fv*8 6|fvh'),
+			frame_dirPalette: ms(null, '14 7*3 14|fh;(15|r3 63*3 15|r1)^3!;22|fv 7|fv*3 22|r2'),
+			// 14 7*3 14;15^3 10*3^3 15^3;14 7*3 14
 			icon_upload: ms(null, '0+2:6+2'),
 			arrow_u: ms(58),
+			rotate_u: ms(null, '0+2:4+2'),
+			rotate_r: ms(null, '0+2:4+2|r1'),
+			rotate_d: ms(null, '0+2:4+2|r2'),
+			rotate_l: ms(null, '0+2:4+2|r3'),
+			flip_v: ms(null, '2+2:4+2'),
+			flip_rv: ms(null, '2+2:4+2|fv'),
+			flip_h: ms(null, '2+2:4+2|r1'),
+			flip_rh: ms(null, '2+2:4+2|r1fh'),
+			select_tranceparent: ms(null, '4+2:4+2'),
+			select_tranceparent_off: ms(null, '4+2:4+2'),
+			debug_rot0: ms(50),
+			debug_rot1: ms(51),
+			debug_rot2: ms(52),
+			debug_rot3: ms(53),
+			debug_fh: ms(54),
+			debug_fv: ms(55),
 			cursor: ms(5),
 		};
 		
@@ -202,14 +240,19 @@ SpriteQueryBuilder.prototype = {
 			if(k.search(/^select_\w*/) == -1){
 				continue;
 			}
-			this.sprites['d1_' + k] = copyCanvasSpriteChunk(this.sprites[k]);
-			swap(this.sprites['d1_' + k], 'set', [188, 188, 188, 255], COLOR_WHITE);
-			this.sprites['d2_' + k] = copyCanvasSpriteChunk(this.sprites[k]);
-			swap(this.sprites['d2_' + k], 'set', [124, 124, 124, 255], COLOR_WHITE);
+			this.sprites['d1_' + k] = copyCanvasSprite(this.sprites[k]);
+			swap(this.sprites['d1_' + k], 'set', glay_l, COLOR_WHITE);
+			this.sprites['d2_' + k] = copyCanvasSprite(this.sprites[k]);
+			swap(this.sprites['d2_' + k], 'set', glay_d, COLOR_WHITE);
 		}
-		
+
 		swap(this.sprites.select_bgPalette, 'set', [0, 0, 252, 255], COLOR_WHITE);
 		swap(this.sprites.select_spriteChunk, 'set', [248, 216, 120, 255], COLOR_WHITE);
+
+		swap(this.sprites.rotate_u, 'set', glay_d, COLOR_WHITE);
+		swap(this.sprites.flip_v, 'set', glay_d, COLOR_WHITE);
+		swap(this.sprites.flip_h, 'set', glay_d, COLOR_WHITE);
+		swap(this.sprites.select_tranceparent_off, 'set', glay_d, COLOR_WHITE);
 		
 	},
 	
@@ -220,7 +263,7 @@ SpriteQueryBuilder.prototype = {
 			, scr = SCROLL.screen
 			, framePos = this.margin.loadedSpriteFrame
 			, palettePos = this.margin.spritePalette
-			, bgpPos = this.margin.bgPalette
+			, bgpPos = this.margin.directionButtons
 			, slpPos = this.margin.selectPalette
 			;
 			
@@ -264,10 +307,13 @@ SpriteQueryBuilder.prototype = {
 		this.isLoaded = true;
 		this.drawLoadedImage();
 		
-		this.makeSelectedBg((r.w * r.h) - 1);
+		this.makeSelectedSprites((r.w * r.h) - 1);
 		this.setBgPalette(MR([r.w - 1, r.h - 1, r.w, r.h].join(' '))); 
 		this.makeSelect();
 		// this.makeSelect(MR([r.w - 1, r.h - 1, 1, 1].join(' ') + ' *8'));
+		
+		this.drawDirections();
+		this.drawDirectionButtons();
 		
 		this.setMouseEventPalette();
 		this.setMouseEventBgPalette();
@@ -324,6 +370,8 @@ SpriteQueryBuilder.prototype = {
 				palRect = SCROLL.bg3.getRect();
 				if(palRect.isContain(x, y)){return;}
 				self.paletteSource = 'canvas';
+				self.resetSelectedDirection();
+				self.drawDirectionButtons();
 				self.makeSelectByCanvas(sel.start.x, sel.start.y, sel.end.x, sel.end.y);
 				self.events.preRefreshCanvasPos = {x: -1, y: -1};
 			}
@@ -366,27 +414,53 @@ SpriteQueryBuilder.prototype = {
 	
 	setMouseEventBgPalette: function()
 	{
-		var r = this.rects.bgPalette
+		var r = this.rects
 			, self = this
+			, con = this.ppControll
 		;
+		con.clearTappableItem('bgsel');
+		con.clearTappableItem('btntp');
+		con.clearTappableItem('btnrot');
+		con.clearTappableItem('btnfh');
+		con.clearTappableItem('btnfv');
+		con.clearTappableItem('btnfv');
 		this.ppControll.appendTappableItem(
-			r,null, function(item, x, y){
+			r.directionTP,null, function(item, x, y){
 				var r = self.cellrects.paletteSelected
 					, sr = self.loadedSprite.cellrect;
 				self.setBgPalette(MR(r.x, r.y, sr.w, sr.h));
-				self.drawSelectedBg();
 			}
 			, 'bgsel'
 		);		
 		this.ppControll.appendFlickableItem(
-			r,
+			r.directionTP,
 			function(item, x, y){
 				self.isContains.bgPalette = true;
 			}, function(item, x, y){
 				self.isContains.bgPalette = false;
 			}
-			, 'bgsel'
+			, 'btntp'
 		);
+		
+		this.ppControll.appendTappableItem(
+			r.directionR,null, function(item, x, y){
+				self.rotateSelectPalette();
+			}
+			, 'btnrot'
+		);
+		this.ppControll.appendTappableItem(
+			r.directionFH,null, function(item, x, y){
+				self.hflipSelectPalette();
+			}
+			, 'btnfh'
+		);
+		this.ppControll.appendTappableItem(
+			r.directionFV,null, function(item, x, y){
+				self.vflipSelectPalette();
+			}
+			, 'btnfv'
+		);
+		
 	},
 	
 	setMouseEventPalette: function()
@@ -409,10 +483,14 @@ SpriteQueryBuilder.prototype = {
 				sel.end.y =  y - r.y;
 				self.paletteSource = 'image';
 				
+				self.resetSelectedDirection();
 				self.makeSelect(sel.start.x, sel.start.y, sel.end.x, sel.end.y);
 				crect = self.cellrects.paletteSelected;
 				rect = self.loadedSprite.cellrect;
-				self.makeSelectedBg(crect.x + (crect.y * rect.w));
+				self.makeSelectedSprites(crect.x + (crect.y * rect.w));
+				self.drawSelectedSingle();
+				self.drawDirectionButtons();
+
 			}
 			, 'palletsel'
 		);
@@ -439,7 +517,7 @@ SpriteQueryBuilder.prototype = {
 		this.ease.swing(SCROLL.bg3.x, targetPos, 16);
 	},
 	
-	/**
+	/**	
 	 * 背景パレットを決定する
 	 * @param {Rect(cell)} cellrect
 	 */
@@ -450,16 +528,56 @@ SpriteQueryBuilder.prototype = {
 	},
 	
 	/**
-	 * 背景パレットを用意する
-	 * @param {integer} id
+	 * DirectionButtonsAction
 	 */
-	makeSelectedBg: function(id)
-	{
-		this.selectedSpritesBg = makeSpriteQuery(this.loadedSprite.image.name, '' + id + '*3^3');
+	rotateSelectPalette: function(){
+		this.selectedDirection.rot = (this.selectedDirection.rot + 1) % 4;
+		if(this.paletteSource == 'canvas'){
+			this.makeSelectByCanvas();
+		}else{
+			this.makeSelect();
+		}
+		this.drawDirectionButtons();
+		this.drawSelectedSingle();
+	},
+	vflipSelectPalette: function(){
+		this.selectedDirection.flip_v = this.selectedDirection.flip_v == 1 ? 0 : 1;
+		if(this.paletteSource == 'canvas'){
+			this.makeSelectByCanvas();
+		}else{
+			this.makeSelect();
+		}
+		this.drawDirectionButtons();
+		this.drawSelectedSingle();
+	},
+	hflipSelectPalette: function(){
+		this.selectedDirection.flip_h = this.selectedDirection.flip_h == 1 ? 0 : 1;
+		if(this.paletteSource == 'canvas'){
+			this.makeSelectByCanvas();
+		}else{
+			this.makeSelect();
+		}
+		this.drawDirectionButtons();
+		this.drawSelectedSingle();
+	},
+	
+	resetSelectedDirection: function(){
+		this.selectedDirection = {rot: 0, flip_h: 0, flip_v: 0};
 	},
 	
 	/**
-	 * 選択したパレットを作成する
+	 * 背景パレットを用意する
+	 * @param {integer} id
+	 */
+	// makeSelectedBg: function(id)
+	makeSelectedSprites: function(id)
+	{
+		this.selectedSpritesBg = makeSpriteQuery(this.loadedSprite.image.name, '' + id + '*3^3');
+		this.selectedSpritesSingle = makeSpriteQuery(this.loadedSprite.image.name, '' + id)
+	},
+	
+	/**
+	 * パレット選択範囲のスプライトを作成する
 	 */
 	makeSelect: function(sx, sy, ex, ey){
 		var img = this.loadedSprite.image
@@ -468,9 +586,11 @@ SpriteQueryBuilder.prototype = {
 			, sel = this.paletteSelect
 			, size = getBuildCellSize()
 			, q = '', sr
-			, x, y, id
+			, x, y, id, i, j
 			, selected = []
 			, comp = this.compressQueries
+			, dir = this.selectedDirection
+			, dstr = this.directionToDstr(dir)
 			;
 		sx = sx == null ? sel.start.x : sx;
 		sy = sy == null ? sel.start.y : sy;
@@ -483,40 +603,60 @@ SpriteQueryBuilder.prototype = {
 		ey = tocellh(ey);
 		sr = MR([sx, sy, ex, ey].join(' ') + ' :pos');
 		
+		this.selectedCellsDir = [];
+		this.selectedSprites = [];
+		j = 0;
 		for(y = sr.y; y < sr.ey; y++){
-			selected.push([]);
+			i = 0;
+			selected[j] = [];
+			this.selectedCellsDir[j] = [];
+			this.selectedSprites[j] = [];
+			this.selectedCellsDir[j] = [];
 			for(x = sr.x; x < sr.ex; x++){
 				id = x + (y * tocellh(pw));
-				selected[selected.length - 1].push(id);
+				selected[j][i] = id;
+				this.selectedCellsDir[j][i] = dstr;
+				this.setSelected(makeSprite(img.name, id), dir, i, j)
+				i++;
 			}
+			j++;
 		}
-		this.selectedCells = selected;
+		//TODO 実装するdirectionSortSprites
+		this.selectedCells = this.directionSortSprites(selected, dir);
 		this.cellrects.paletteSelected = sr;
+		this.selectedCellsDir = this.directionSortSprites(this.selectedCellsDir, dir);
 		
-		q = '' + sr.x + '+' + sr.w + ':' + sr.y + '+' + sr.h;
-		this.selectedSprites = makeSpriteQuery(img.name, q);
-		this.spritesEraser = makeSpriteQuery(this.uiSpriteName, '63*' + sr.w + '^' + sr.h);
+		q = '' + sr.x + '+' + sr.w + ':' + sr.y + '+' + sr.h + this.directionToDstr(dir);
+		// TODO |rx|fhfv
+		// this.selectedSprites = makeSpriteQuery(img.name, q);
+		this.selectedSprites = this.directionSortSprites(this.selectedSprites, dir);
+		this.spritesEraser = makeSpriteQuery(this.uiSpriteName, '63*' + this.selectedCells[0].length + '^' + this.selectedCells.length + dstr);
+		
 		
 		if(sr.w == 1 && sr.h == 1){
 			return;
 		}
 		comp[q] = q in comp ? comp[q] : {rect: sr, sprites: this.convertCanvasPuts(this.selectedSprites), query: q};
 		this.sortedQueries = this.sortQueries(comp);
-		console.log(q, comp, this.sortedQueries);
+		// console.log(q, comp, this.sortedQueries);
 	},
 	
 	/**
 	 * キャンバスから選択したパレットを作成する
 	 */
 	makeSelectByCanvas: function(sx, sy, ex, ey){
-		var img = this.loadedSprite.image
+		var img = this.loadedSprite.image.name
 			, pw = this.cellrects.base.w
 			, ph = this.cellrects.base.h
 			, sel = this.paletteSelect
 			, size = getBuildCellSize()
 			, q = '', sr
-			, x, y, id
+			, x, y, id, dstr, len, i, j, spr
 			, selected = []
+			, seldir = []
+			, dir = this.selectedDirection
+			, calced
+			, rotexp = /\S*r(\d)\S*/
 			;
 		sx = sx == null ? sel.start.x : sx;
 		sy = sy == null ? sel.start.y : sy;
@@ -529,51 +669,218 @@ SpriteQueryBuilder.prototype = {
 		ey = tocellh(ey);
 		sr = MR([sx, sy, ex, ey].join(' ') + ' :pos');
 		
+		this.selectedSprites = [];
+		this.selectedCellsDir = [];
+		j = 0;
 		for(y = sr.y; y < sr.ey; y++){
-			selected.push([]);
+			i = 0;
+			selected[j] = [];
+			seldir[j] = [];
+			this.selectedSprites[j] = [];
+			this.selectedCellsDir[j] = [];
 			for(x = sr.x; x < sr.ex; x++){
 				id = this.canvasPuts[x + (y * pw)];
-				selected[selected.length - 1].push(id);
+				selected[j][i] = id;
+				dstr = this.canvasDirections[x + (y * pw)];
+				seldir[j][i] = dstr;
+				spr = makeSprite(img, id);
+				calced = this.calcDirection(dstr, dir, 'object');
+				
+				this.setSelected(spr, calced, i, j)
+				console.log(spr, dir, dstr, calced);
+				i++
+			}
+			j++
+		}
+		
+		this.selectedCells = this.directionSortSprites(selected, dir);
+		this.cellrects.paletteSelected = sr;
+		
+		this.selectedCellsDir = this.directionSortSprites(this.selectedCellsDir, dir);
+		
+		
+		this.selectedSprites = this.directionSortSprites(this.selectedSprites, dir);
+		
+// console.log(this.selectedCells, this.selectedSprites, this.selectedCellsDir)
+		dstr = this.directionToDstr(dir);
+		this.spritesEraser = makeSpriteQuery(this.uiSpriteName, '63*' + this.selectedCells[0].length + '^' + this.selectedCells.length + dstr);
+		// console.log(this.compressQueries, this.sortedQueries);
+	},
+	
+	setSelected: function(spr, dir, x, y)
+	{
+		rotSprite(spr, dir.rot);
+		flipSprite(spr, dir.flip_h, dir.flip_v);
+		this.selectedSprites[y][x] = spr;
+		this.selectedCellsDir[y][x] = this.directionToDstr(dir);
+	},
+	
+	directionSortSprites: function(selected, dir)
+	{
+		var i, j, h = selected.length, w = selected[0].length
+			, rsorted = [], sorted = [], len
+		;
+		len = dir.rot == 1 || dir.rot == 3 ? w : h;
+		
+		for(j = 0; j < len; j++){
+			rsorted[j] = [];
+			sorted[j] = [];
+		}
+		
+		if(dir.rot == 1){
+			for(j = 0; j < h; j++){
+				for(i = 0; i < w; i++){
+					rsorted[i][h - j - 1] = selected[j][i];
+				}
+			}
+		}else if(dir.rot == 2){
+			for(j = 0; j < h; j++){
+				for(i = 0; i < w; i++){
+					rsorted[h - j - 1][w - i - 1] = selected[j][i];
+				}
+			}
+		}else if(dir.rot == 3){
+			for(j = 0; j < h; j++){
+				for(i = 0; i < w; i++){
+					rsorted[w - i - 1][j] = selected[j][i];
+				}
+			}
+		}else{
+			for(j = 0; j < h; j++){
+				for(i = 0; i < w; i++){
+					rsorted[j][i] = selected[j][i];
+				}
 			}
 		}
 		
-		this.selectedCells = selected;
-		this.cellrects.paletteSelected = sr;
+		h = rsorted.length;
+		w = rsorted[0].length;
+		if(dir.flip_h > 0){
+			for(j = 0; j < h; j++){
+				for(i = 0; i < w; i++){
+					sorted[j][w - i - 1] = rsorted[j][i];
+				}
+			}
+		}else{
+			for(j = 0; j < h; j++){
+				for(i = 0; i < w; i++){
+					sorted[j][i] = rsorted[j][i];
+				}
+			}
+		}
 		
-		q = '' + sr.x + '+' + sr.w + ':' + sr.y + '+' + sr.h;
-		
-		this.selectedSprites = makeSpriteChunk(img.name, selected);
-		this.spritesEraser = makeSpriteQuery(this.uiSpriteName, '63*' + sr.w + '^' + sr.h);
-		console.log(this.compressQueries, this.sortedQueries);
+		if(dir.flip_v > 0){
+			for(j = 0; j < h; j++){
+				for(i = 0; i < w; i++){
+					rsorted[h - j - 1][i] = sorted[j][i];
+				}
+			}
+		}else{
+			for(j = 0; j < h; j++){
+				for(i = 0; i < w; i++){
+					rsorted[j][i] = sorted[j][i];
+				}
+			}
+		}
+		return rsorted;
 	},
 	
 	/**
 	 * キャンバスにスプライトを置く
 	 */
-	putSpritePalette: function(x, y){
-		var bg1 = SCROLL.bg1
-			, tpos = this.cpControll.getMovePos()
+	putSpritePalette: function(x, y, dir){
+		var tpos = this.cpControll.getMovePos()
 			, cv3 = SCROLL.bg3.canvas
 			, pr = MR(SCROLL.bg3.x, 0, cv3.width, cv3.height)
-			, ppos = {x: parseCell(x), y: parseCell(y)}
+			// , ppos = {x: parseCell(x), y: parseCell(y)}
+			, putpos
 			, cpos = {x: tocellh(x), y: tocellh(y)}
 			, cr = this.cellrects.paletteSelected
 			, selectR = this.selectedCells
 			, j, i
 			, sizeW = (cv3.width / getBuildCellSize().w) | 0
+			, dirstr = (dir.rot > 0 ? 'r' + dir.rot : '') + (dir.flip_h > 0 ? 'fh' : '') + (dir.flip_v > 0 ? 'fv' : '')
 		;
 		if(pr.isContain(tpos.x, tpos.y)){
 			return;
 		}
-		
+		try{
+			
 		for(j = 0; j < selectR.length; j++){
 			for(i = 0; i < selectR[j].length; i++){
-				this.canvasPuts[((cpos.y + j) * sizeW) + (cpos.x + i)] = this.selectedCells[j][i];
+				putpos = ((cpos.y + j) * sizeW) + (cpos.x + i);
+				this.canvasPuts[putpos] = this.selectedCells[j][i];
+				// this.canvasDirections[putpos] = this.calcDirection(this.selectedCellsDir[j][i], dirstr, 'string');
+				this.canvasDirections[putpos] = this.selectedCellsDir[j][i];
+				console.log(this.canvasDirections[putpos]);
 			}
 		}
-		// bg1.drawSpriteChunk(this.spritesEraser, ppos.x, ppos.y);
-		// bg1.drawSpriteChunk(this.selectedSprites, ppos.x, ppos.y);
+		}
+		catch(e){
+			console.log(e)
+				debugger
+			
+		}
+				console.log(this.selectedCellsDir)
+		//TODO calcDirection作成
+	},
+	
+	/**
+	 * directionを合成
+	 */
+	calcDirection: function(src, dst, type)
+	{
+		// console.log(a, b)
+		var dir = {rot: 0, flip_v: 0, flip_h: 0}
+		;
+		src = typeof src == 'string' ? this.dstrToDirection(src) : src;
+		dst = typeof dst == 'string' ? this.dstrToDirection(dst) : dst;
+		type = type == null ? 'object' : type;
 		
+		
+		dir.rot = (src.rot + dst.rot) % 4;
+		dir.flip_h = (src.flip_h + dst.flip_h) % 2;
+		dir.flip_v = (src.flip_v + dst.flip_v) % 2;
+		
+		if(dst.rot % 2 == 1 && (src.flip_h == 1 || src.flip_v == 1)){
+			console.log(dir, src, dst)
+			dir.flip_h = dir.flip_h == 1 ? 0 : 1;
+			dir.flip_v = dir.flip_v == 1 ? 0 : 1;
+		}
+		// console.log(dir.rot , src.rot)
+		// if((src.rot + dst.rot) % 2 == 1){
+			// p = dir.flip_h;
+			// dir.flip_v = dir.flip_h;
+			// dir.flip_h = p;
+			// console.log(dir)
+		// }
+		
+		dir = type == 'string' ? this.directionToDstr(dir) : dir;
+		return dir;
+	},
+	
+	dstrToDirection: function(dstr)
+	{
+		var dir = {rot: 0, flip_v: 0, flip_h: 0}
+			, rotexp = /\S*\|?r(\d)\S*/
+			;
+			
+		dir.rot = (dstr.indexOf('r') >= 0 ? dstr.replace(rotexp, "$1") | 0 : 0);
+		dir.flip_h = dstr.indexOf('fh') >= 0 ? 1 : 0;
+		dir.flip_v = dstr.indexOf('fv') >= 0 ? 1 : 0;
+		return dir;
+	},
+	
+	directionToDstr: function(dir, before)
+	{
+		var dstr = '';
+		before = before == null ? '' : before;
+		dstr += dir.rot > 0 ? '|r' + dir.rot : '';
+		dstr += dir.flip_h > 0 ? '|fh' : '';
+		dstr += dir.flip_v > 0 ? '|fv' : '';
+		dstr = dstr.length > 0 ? dstr : '';
+		// console.log(dstr)
+		return dstr;
 	},
 	
 	getBuildCellsRect: function(){
@@ -668,12 +975,21 @@ SpriteQueryBuilder.prototype = {
 	},
 	
 	convertCanvasPuts: function(sprChunk){
-		var i, j, conv = [], w, h, spr;
-		for(j = 0; j < sprChunk.length; j++){
-			for(i = 0; i < sprChunk[j].length; i++){
-				spr = sprChunk[j][i];
-				conv.push(spr.id);
+		var i, j, conv = [], w, h, spr, ids;
+		if(sprChunk.length != null){
+			for(j = 0; j < sprChunk.length; j++){
+				for(i = 0; i < sprChunk[j].length; i++){
+					conv.push(sprChunk[j][i].id);
+				}
 			}
+		}else{
+			ids = sprChunk.chunkIds
+			for(j = 0; j < ids.length; j++){
+				for(i = 0; i < ids[j].length; i++){
+					conv.push(ids[j][i]);
+				}
+			}
+			
 		}
 		return new Int16Array(conv);
 	},
@@ -791,7 +1107,7 @@ SpriteQueryBuilder.prototype = {
 		}
 		
 		chunked = [];
-		console.log(spritesG);
+		// console.log(spritesG);
 		for(j in spritesG){
 			chunks = [];
 			for(i in spritesG[j]){
@@ -799,7 +1115,7 @@ SpriteQueryBuilder.prototype = {
 			}
 			chunked.push(chunks);
 		}
-		console.log(chunked);
+		// console.log(chunked);
 		
 		return chunked;
 	},
@@ -829,12 +1145,27 @@ SpriteQueryBuilder.prototype = {
 				}
 				return "single";
 			}
+			, psearch = function(x, y){
+				var chunks, q, i, ck;
+				for(q in paired){
+					chunks = paired[q];
+					for(i = 0; i < chunks.length; i++){
+						ck = chunks[i];
+						if(ck.x == x && ck.y == y){
+							return q;
+						}
+						if(ck.isContain(x, y)){
+							return null;
+						}
+					}
+				}
+				return "single";
+			}			
 			, doIdPairStack = function(id, stack, paired_y, x, mode)
 			{
 				//idとstackが違うときにスタックする
 				var slen = stack.length;
 				if(id == stack[0] || slen == 0){
-					console.log(stack[0]);
 					return stack;
 				}
 				if(stack[0].match(/[:\+]/) != null){
@@ -849,7 +1180,7 @@ SpriteQueryBuilder.prototype = {
 				return stack;
 			}
 		;
-		
+
 		for(y = erect.y; y < erect.ey; y++){
 			paired[y] = {};
 			find_first = 0;
@@ -868,21 +1199,20 @@ SpriteQueryBuilder.prototype = {
 				//idをわざとずらして末端処理
 				idStack = doIdPairStack(id + 1, idStack, paired[y], find_first, '*');
 			}
-
 			id = null;
 		}
 // console.log(paired)
-
 		// TODO 縦の圧縮？
 		idStack = [];
 		id = '-1';
 		for(x = erect.x; x < erect.ex; x++){
 			find_first = 0;
 			for(y = erect.y; y < erect.ey; y++){
+				// debugger;
 				if(paired[y] == null){continue;}
 				//縦ペア初期化
 				vPaired[y] = vPaired[y] == null ? {} : vPaired[y];
-				find = qsearch(x, y);
+				find = psearch(x, y);
 				if(find === null){
 					continue;
 				}
@@ -891,14 +1221,15 @@ SpriteQueryBuilder.prototype = {
 				if(id == null){
 					continue;
 				}
+				
 			// console.log(vPaired, paired, idStack, x, y,  find, find_first);
-			
 				//ペア出力をスタック＆idStackを更新
 				idStack = doIdPairStack(id, idStack, vPaired[find_first], x, '^');
-				
+
 				//最初にidが見つかった位置
 				find_first = idStack.length == 0 ? y : find_first;
 				idStack.push(id);
+				// console.log(paired, paired[y][x], y, x, id, find_first, find, idStack)
 					// console.log(find, vPaired[y], idStack)
 			// console.log(vPaired, idStack, y,  find, find_first);
 			}
@@ -918,7 +1249,7 @@ SpriteQueryBuilder.prototype = {
 			}
 		}
 		
-		console.log(vPaired)
+		// console.log(vPaired)
 		return vPaired;
 	},
 	/**
@@ -1096,7 +1427,6 @@ SpriteQueryBuilder.prototype = {
 			for(y = erect.y; y < erect.ey; y++){
 				for(x = erect.x; x < erect.ex; x++){
 					find = compare(s, r, x, y);
-					
 					//既に検出済みの位置・範囲を除外
 					if(find == null || overlap(finded, find)){
 						continue;
@@ -1123,7 +1453,6 @@ SpriteQueryBuilder.prototype = {
 		}
 		this.debugCountMax = pcnt > 0 ? pcnt : 1;
 		this.sortedQueries = this.sortQueries(comp);
-		// console.log(finded);
 		return finded;
 	},
 	
@@ -1131,7 +1460,12 @@ SpriteQueryBuilder.prototype = {
 	 * イベントをAppで処理
 	 */
 	eventsProcess: function(){
-		var pre = this.events.preRefreshCanvasPos
+		this.eventOutputQuery();
+
+	},
+	
+	eventOutputQuery: function(){
+	var pre = this.events.preRefreshCanvasPos
 			, x = tocellh(pre.x)
 			, y = tocellh(pre.y)
 			, asset = this.events.asSetRefreshCanvasPos
@@ -1146,15 +1480,21 @@ SpriteQueryBuilder.prototype = {
 			asset.y = pre.y;
 			return;
 		}
-		this.putSpritePalette(pre.x, pre.y);
+		this.putSpritePalette(pre.x, pre.y, this.selectedDirection);
 		finded = this.scanPaletteChunks();
 		paired = this.scanCanvasPair(finded);
 		// this.scanCanvasChunks(finded);
-		this.drawRefreshCanvas(pre.x, pre.y);
+		if(this.debugDirection){
+			this.drawDirectionCanvas(pre.x, pre.y);
+		}else{
+			this.drawSpritesCanvas(pre.x, pre.y);
+		}
 		aligned = this.alignChunks(paired);
 		this.outputSpriteQueryBatch(aligned);
+		
 		asset.x = x;
 		asset.y = y;
+		
 	},
 
 	//One Time Draw
@@ -1198,7 +1538,50 @@ SpriteQueryBuilder.prototype = {
 			, loadR = this.rects.spritePalette
 		;
 		bg.clear(null, loadR);
+		//*blue sprite cursor
 		bg.drawSpriteChunk(this.sprites.select_bgPalette, cto(selectR.x) + loadR.x, cto(selectR.y) + loadR.y);
+	},
+
+	
+	/**
+	 * 方向関連
+	 */
+	drawDirections: function()
+	{
+		var bg = SCROLL.bg3
+			, r = this.rects.directionPalette
+			, selectR = this.cellrects.bgSelected
+			, rr = this.rects.directionR
+			, rfh = this.rects.directionFH
+			, rfv = this.rects.directionFV
+			, rtp = this.rects.directionTP
+		;
+		bg.clear(null, r);
+		bg.drawSpriteChunk(this.sprites.frame_dirPalette, r.x - cto(1), r.y - cto(1));
+		bg.drawSpriteChunk(this.sprites.rotate_u, rr.x, rr.y);
+		bg.drawSpriteChunk(this.sprites.flip_v, rfv.x, rfv.y);
+		bg.drawSpriteChunk(this.sprites.flip_h, rfh.x, rfh.y);
+		bg.drawSpriteChunk(this.sprites.select_tranceparent, rtp.x, rtp.y);
+	},
+	
+	drawDirectionButtons: function(actives)
+	{
+		var bg = SCROLL.bg3
+			, r = this.rects.directionButtons
+			, selectR = this.cellrects.bgSelected
+			, rr = this.rects.directionR
+			, rfh = this.rects.directionFH
+			, rfv = this.rects.directionFV
+			, rtp = this.rects.directionTP
+			, spr = ['rotate_u', 'rotate_r', 'rotate_d', 'rotate_l']
+			, sph = ['flip_h', 'flip_rh']
+			, spv = ['flip_v', 'flip_rv']
+		;
+		bg.clear(COLOR_BLACK, r);
+		bg.drawSpriteChunk(this.sprites[spr[this.selectedDirection.rot]], rr.x, rr.y);
+		bg.drawSpriteChunk(this.sprites[spv[this.selectedDirection.flip_v]], rfv.x, rfv.y);
+		bg.drawSpriteChunk(this.sprites[sph[this.selectedDirection.flip_h]], rfh.x, rfh.y);
+		bg.drawSpriteChunk(this.sprites.select_tranceparent, rtp.x, rtp.y);
 	},
 	
 	drawSelectedSprite: function()
@@ -1209,22 +1592,103 @@ SpriteQueryBuilder.prototype = {
 		bg.clear(null, r);
 		bg.drawSpriteChunk(this.selectedSprites, r.x, r.y);
 	},
-	
+
 	drawSelectedBg: function()
 	{
 		var bg = SCROLL.bg3
-			, r = this.rects.bgPalette
+			, r = this.rects.directionPalette
 		;
 		bg.clear(null, r);
 		bg.drawSpriteChunk(this.selectedSpritesBg, r.x, r.y);
 	},
-
-	drawRefreshCanvas: function(x, y){
+	
+	drawSelectedSingle: function()
+	{
+		var bg = SCROLL.bg3
+			, r = this.rects.directionPalette
+			, r1 = this.rects.selectedSingle
+			, sprite = copyCanvasSprite(this.selectedSpritesSingle)
+		;
+		bg.clear(null, r1);
+		
+		sprite.rot(this.selectedDirection.rot);
+		sprite.vflip(this.selectedDirection.flip_v);
+		sprite.hflip(this.selectedDirection.flip_h);
+		bg.drawSpriteChunk(sprite, r.x + cto(1), r.y + cto(1));
+	},
+	
+	drawSpritesCanvas: function(x, y){
 		var bg1 = SCROLL.bg1
 			, ppos = {x: parseCell(x), y: parseCell(y)}
 		;
 		bg1.drawSpriteChunk(this.spritesEraser, ppos.x, ppos.y);
 		bg1.drawSpriteChunk(this.selectedSprites, ppos.x, ppos.y);
+	},
+	
+	drawRefreshCanvas: function(){
+		var bg1 = SCROLL.bg1
+			, dir = this.canvasDirections, d
+			, put = this.canvasPuts, p
+			, ppos
+			, sprites = this.sprites, i, j, s
+			, w = this.cellrects.base.w, h = this.cellrects.base.h
+		;
+		bg1.clear(COLOR_BLACK);
+		for(j = 0; j < h; j++){
+			for(i = 0; i < w; i++){
+				ppos = i + (j * w);
+				p = put[ppos];
+				d = dir[ppos];
+				if(p >= 0){
+					s = makeSpriteQuery(this.loadedSprite.image.name, "" + p + d);
+				}else{
+					s = sprites.blank;
+				}
+				bg1.drawSprite(s, cto(i), cto(j));
+			}
+		}
+	},
+	
+	drawDirectionCanvas: function(x, y){
+		var sel = this.selectedCellsDir
+			, ppos = {x: parseCell(x), y: parseCell(y)}
+		;
+		
+		crect = MR(tocellh(ppos.x), tocellh(ppos.y), sel[0].length, sel.length);
+		this.drawRefreshCanvasDirection(crect);
+	},
+	
+	drawRefreshCanvasDirection: function(crect){
+		var bg1 = SCROLL.bg1
+			, dir = this.canvasDirections, d
+			, ppos
+			, rots = ['debug_rot0', 'debug_rot1', 'debug_rot2', 'debug_rot3']
+			, sprites = this.sprites, i, j
+			, w, h, x, y, bw = this.cellrects.base.w, bh = this.cellrects.base.h
+		;
+		crect = crect == null ? MR(0, 0, bw, bh) : crect
+		w = crect.w;
+		h = crect.h;
+		x = crect.x;
+		y = crect.y;
+
+		for(j = y; j < h + y; j++){
+			for(i = x; i < w + x; i++){
+				d = this.dstrToDirection(dir[i + (j * bw)]);
+				bg1.drawSprite(sprites.black, cto(i), cto(j));
+				
+				if(d.rot > 0){
+					bg1.drawSprite(sprites[rots[d.rot]], cto(i), cto(j));
+				}
+				if(d.flip_h > 0){
+					bg1.drawSprite(sprites.debug_fh, cto(i), cto(j));
+				}
+				if(d.flip_v > 0){
+					bg1.drawSprite(sprites.debug_fv, cto(i), cto(j));
+				}
+			}
+		}
+		
 	},
 			
 	//Repeat Draw
@@ -1253,6 +1717,12 @@ SpriteQueryBuilder.prototype = {
 		
 		refreshTextArea(this.convertQuery(sprites, range));
 	},
+	
+	outputCellpos: function(x, y){
+		
+		document.getElementById('cell_x').value = x;
+		document.getElementById('cell_y').value = y;
+	},
 
 	drawPaletteCursor: function(){
 		var tpos = this.ppControll.getMovePos()
@@ -1265,6 +1735,7 @@ SpriteQueryBuilder.prototype = {
 		if(r.isContain(tpos.x, tpos.y) == false){
 			return;
 		}
+		this.outputCellpos(tocellh(tpos.x - r.x), tocellh(tpos.y - r.y));
 		
 		SCROLL.sprite.drawSpriteChunk(this.sprites.cursor, parseCell(bg3.x + tpos.x), parseCell(bg3.y + tpos.y));
 	},
@@ -1282,6 +1753,8 @@ SpriteQueryBuilder.prototype = {
 		if(r.isContain(tpos.x, tpos.y) == false || bgr.isContain(tpos.x, tpos.y)){
 			return;
 		}
+		
+		this.outputCellpos(tocellh(tpos.x), tocellh(tpos.y));
 		
 		SCROLL.sprite.drawSpriteChunk(this.sprites.cursor, parseCell(tpos.x), parseCell(tpos.y));
 	},
@@ -1333,7 +1806,6 @@ SpriteQueryBuilder.prototype = {
 				'1000': 'select_cup_b', '0100': 'select_cup_t', '0010': 'select_cup_r', '0001': 'select_cup_l', 
 			}
 		;
-		
 		for(y = rect.y; y < rect.y + rect.h; y++){
 			for(x = rect.x; x < rect.x + rect.w; x++){
 				mode = false;
@@ -1375,11 +1847,15 @@ SpriteQueryBuilder.prototype = {
 		
 	},
 	
-	drawContainBgPalette: function()
+	/**
+	 * 選択スプライト点滅
+	 */
+	drawContainBgButton: function()
 	{
 		var scr = SCROLL.sprite
 			, pos = this.ppControll.getMovePos()
-			, bgr = this.rects.bgPalette
+			, bgr = this.rects.directionTP
+			, palr = this.rects.directionPalette
 			, s = this.selectedSpritesBg
 		;
 		
@@ -1389,7 +1865,7 @@ SpriteQueryBuilder.prototype = {
 		if(!bgr.isContain(pos.x, pos.y)){
 			return;
 		}
-		scr.drawSpriteChunk(s, bgr.x, bgr.y);
+		scr.drawSpriteChunk(s, palr.x, palr.y);
 		
 	},
 	
@@ -1414,12 +1890,12 @@ SpriteQueryBuilder.prototype = {
 		this.drawDropFileIcons();
 		this.drawPaletteCursor();
 		this.drawSelectedRange();
-		this.drawContainBgPalette();
+		this.drawContainBgButton();
 		this.drawSelectedPalette();
 		this.drawSlidePaletteScroll();
 		this.drawCanvasCursor();
 		this.drawDebugCanvasCursor();
-		// this.drawRefreshCanvas();
+		// this.drawSpritesCanvas();
 		this.appClock++;
 	},
 	
@@ -1443,10 +1919,19 @@ SpriteQueryBuilder.prototype = {
 			this.bgPos.y -= 1 + this.boost;
 		}
 		
-		if(state.ext){
-			this.boost = true;
-		}else{
-			this.boost = false;
+		if(state.ext && (trig['<'] || trig['>'])){
+			this.debugDirection = !this.debugDirection;
+			if(this.debugDirection){
+				this.drawRefreshCanvasDirection();
+			}else{
+				this.drawRefreshCanvas();
+				
+			}
+		}
+		
+		if(state.ext && trig.select){
+			SCROLL.tmp.screenShot();
+			return;
 		}
 		
 		if(trig['>'] || hold['>']){
