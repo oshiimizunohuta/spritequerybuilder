@@ -45,6 +45,11 @@ var cto = cellhto;
 var SCROLL = null;
 var MR = makeRect;
 
+/**
+ * @class 
+ * @name SpriteQueryBuilder
+ */
+
 function SpriteQueryBuilder(){
 	return;
 }
@@ -80,7 +85,7 @@ SpriteQueryBuilder.prototype = {
 			spriteSingle: null,
 			spritesBg: null,
 			direction: {rot: 0, flip_h: 0, flip_v: 0},
-			query: null,
+			queries: [],
 			rect: null,
 		};
 		this.events ={
@@ -198,7 +203,7 @@ SpriteQueryBuilder.prototype = {
 			self.initDrawBG();
 			requestAnimationFrame(main);
 			
-			//TODO test
+			// TODO test
 			// self.setMouseEventPalette();
 			// self.setMouseEventBgPalette();
 
@@ -650,7 +655,7 @@ SpriteQueryBuilder.prototype = {
 	makeSelectedSprites: function(id)
 	{
 		// this.selectedSpritesBg = makeSpriteQuery(this.loadedSprite.image.name, '' + id + '*3^3');
-		this.selectedInfo.spritesBg = makeSpriteQuery(this.loadedSprite.image.name, '' + id + '*10^8');
+		// this.selectedInfo.spritesBg = makeSpriteQuery(this.loadedSprite.image.name, '' + id + '*10^8');
 		this.selectedInfo.spritesSingle = makeSpriteQuery(this.loadedSprite.image.name, '' + id)
 	},
 	
@@ -705,15 +710,17 @@ SpriteQueryBuilder.prototype = {
 		this.cellrects.paletteSelected = sr;
 		
 		selInfo.cellsDir = this.directionSortSprites(selInfo.cellsDir, dir);
+		
+		dstr = directionToDstr(dir);
 
-		q = '' + sr.x + '+' + sr.w + ':' + sr.y + '+' + sr.h + directionToDstr(dir);
-		selInfo.query = q;
+//		q = sr.w + sr.h == 2 ? (sr.x + (sr.y * this.loadedSprite.cellrect.w)) + dstr :  '' + sr.x + '+' + sr.w + ':' + sr.y + '+' + sr.h + dstr;
+		q = sr.w + sr.h == 2 ? (sr.x + (sr.y * this.loadedSprite.cellrect.w)):  '' + sr.x + '+' + sr.w + ':' + sr.y + '+' + sr.h;
+		selInfo.queries = MR(selInfo.cells).convertArray(q);
 		selInfo.rect = sr;
 		
 		// TODO |rx|fhfv
 		selInfo.sprites = this.directionSortSprites(selInfo.sprites, dir);
 		this.spritesEraser = makeSpriteQuery(this.uiSpriteName, '63*' + selInfo.cells[0].length + '^' + selInfo.cells.length);
-console.log(this.spritesEraser)
 		if(sr.w == 1 && sr.h == 1){
 			return;
 		}
@@ -762,8 +769,16 @@ console.log(this.spritesEraser)
 			seldir[j] = [];
 			selInfo.sprites[j] = [];
 			selInfo.cellsDir[j] = [];
+			selInfo.queries[j] = [];
 			q[j] = [];
 			for(x = sr.x; x < sr.ex; x++){
+				qinfo = this.canvasQueries[x + (y * pw)];
+				if(sr.isOverlap(qinfo.rect)){
+					selInfo.queries[j][i] = qinfo.query;
+				}else{
+					selInfo.queries[j][i] = this.makeCanvasQueryInfo().query;
+				}
+				
 				id = this.canvasPuts[x + (y * pw)];
 				selected[j][i] = id;
 				dstr = this.canvasDirections[x + (y * pw)];
@@ -771,13 +786,13 @@ console.log(this.spritesEraser)
 				spr = makeSprite(img, id);
 				calced = this.calcDirection(dstr, dir, 'object');
 				
-				this.setSelected(spr, calced, i, j)
-				console.log(spr, dir, dstr, calced);
+				this.setSelected(spr, calced, i, j);
+				// console.log(spr, dir, dstr, calced);
 				q[j].push(id + calced.dstr);
-				i++
+				i++;
 			}
 			q[j] = q[j].join(' ');
-			j++
+			j++;
 		}
 		q = q.join(';');
 		
@@ -786,15 +801,16 @@ console.log(this.spritesEraser)
 
 		selInfo.cellsDir = this.directionSortSprites(selInfo.cellsDir, dir);
 		
-		qinfo = this.canvasQueries[sx + (sy *pw)];
-		if(sr.isFit(qinfo.rect)){
-			console.log(qinfo, sx, sy);
-			selInfo.query = qinfo.query.replace(/\|\S*/, '') + calced.dstr;
-			selInfo.rect = qinfo.rect;
-		}else{
-			selInfo.query = q + calced.dstr;
-			selInfo.rect = sr;
-		}
+		// qinfo = this.canvasQueries[sx + (sy *pw)];
+		// if(sr.isFit(qinfo.rect)){
+			// console.log(qinfo, sx, sy);
+			// selInfo.queries[0][0] = qinfo.query.replace(/\|\S*/, '') + calced.dstr;
+			// selInfo.rect = qinfo.rect;
+		// }else{
+			// selInfo.queries[0][0] = q + calced.dstr;
+			// selInfo.rect = sr;
+		// }
+		selInfo.rect = sr;
 
 		// TODO  this.canvasQueries[sx][sy] = this.selectedQuery;
 
@@ -890,19 +906,35 @@ console.log(this.spritesEraser)
 	/**
 	 * キャンバスにスプライトを置く
 	 */
-	putSpritePalette: function(x, y, dir){
+//	putSpritePalette: function(x, y, dir){
+	putSpritePalette: function(x, y){
 		var tpos = this.cpControll.getMovePos()
 			, cv3 = SCROLL.bg3.canvas
 			, pr = MR(SCROLL.bg3.x, 0, cv3.width, cv3.height)
 			, selInfo = this.selectedInfo
 			, putpos
 			, cpos = {x: tocellh(x), y: tocellh(y)}
-			, cr = this.cellrects.paletteSelected
+			// , cr = this.cellrects.paletteSelected
 			, selectR = selInfo.cells
 			, j, i
 			, sizeW = (cv3.width / getBuildCellSize().w) | 0
-			, dirstr = (dir.rot > 0 ? 'r' + dir.rot : '') + (dir.flip_h > 0 ? 'fh' : '') + (dir.flip_v > 0 ? 'fv' : '')
-			, putRect = MR(cpos.x, cpos.y, selectR[0].length, selectR.length)
+			// , dirstr = (dir.rot > 0 ? 'r' + dir.rot : '') + (dir.flip_h > 0 ? 'fh' : '') + (dir.flip_v > 0 ? 'fv' : '')
+			// , putRect = MR(cpos.x, cpos.y, selectR[0].length, selectR.length)
+			, fixed = []
+			, fixQInfo = function(infoArr, qInfo){
+				//queryInfoの配置位置を固定する
+				var i, j;
+				for(j = qInfo.rect.y; j < qInfo.rect.ey; j++){
+					infoArr[j] = infoArr[j] == null ? [] : infoArr[j];
+					for(i = qInfo.rect.x; i < qInfo.rect.ex; i++){
+						if(infoArr[j][i] != null){
+							return false;
+						}
+						infoArr[j][i] = qInfo;
+					}
+				}
+				return true;
+			}
 		;
 		if(pr.isContain(tpos.x, tpos.y)){
 			return;
@@ -919,9 +951,9 @@ console.log(this.spritesEraser)
 					this.canvasDirections[putpos] = selInfo.cellsDir[j][i];
 					
 					//クエリの重なりを削除する判定
-					this.putCanvasQuery(putRect, selInfo.query);
-					
-					// console.log(this.canvasDirections[putpos]);
+					if(fixQInfo(fixed, this.makeCanvasQueryInfo(selInfo.queries[j][i], queryToRect(selInfo.queries[j][i]).reculc(i, j)))){
+						this.putCanvasQuery(fixed[j][i].rect.reculc(cpos.x + i, cpos.y + j), fixed[j][i].query);
+					}
 				}
 			}
 			
@@ -969,7 +1001,6 @@ console.log(this.spritesEraser)
 			, pos
 			, q
 		;
-		// SCROLL.bg1.clear(COLOR_RED, MR([rect.x, rect.y, rect.w, rect.h].join(' ') + ' *8'))
 		for(j = rect.y; j < rect.ey; j++){
 			for(i = rect.x; i < rect.ex; i++){
 				pos = i + (w * j);
@@ -978,15 +1009,17 @@ console.log(this.spritesEraser)
 					this.clearCanvasQueries(q.rect);
 				}
 				this.canvasQueries[pos] = this.makeCanvasQueryInfo(query, rect);
+//		console.log(query, rect);
 			}
 		}
 	},
 	
 	importQuery: function(text)
 	{
-		var sprite, rect, bg1 = SCROLL.bg1
-			, i, j, x, y, qchunk, id, mc
-			, reg = /^\((\d+),(\d)\)([0-9+-:]+)([0-9rfvh|]?)/
+		var sprite, rect, bg1 = SCROLL.bg1, selInfo = this.selectedInfo
+			, i, j, x, y, dir, qchunk, id, mc, self = this
+			, reg = /^\((\d+),(\d+),([0-9rfvh|]*)\)([0-9+-:]+)/
+			, defDir = dstrToDirection(directionToDstr(selInfo.direction));
 		;
 		
 		if(text == ""){
@@ -995,16 +1028,19 @@ console.log(this.spritesEraser)
 		// console.log(text)
 		try{
 			sprite = makeSpriteQuery(this.loadedSprite.image.name, text);
+			console.log(sprite);
 			qchunk = outputLowChunkQuery(sprite);
 			qchunk = qchunk.split(' ');
+			console.log(qchunk);
 			for(j = 0; j < qchunk.length; j++){
 				mc = qchunk[j].match(reg);
-				rect = queryToRect(mc[3], this.loadedSprite.cellrect);
-				
+				rect = queryToRect(mc[4], this.loadedSprite.cellrect);
+				dir = this.calcDirection(dstrToDirection(mc[3]), defDir);
+				selInfo.direction = dir;
 				this.makeSelect(cto(rect.x), cto(rect.y), cto(rect.ex) - 1, cto(rect.ey) - 1);
 				x = cto(mc[1]);
 				y = cto(mc[2]);
-				this.putSpritePalette(x, y, dstrToDirection(mc[3]));
+				this.putSpritePalette(x, y);
 				if(this.debugCanvasInfo == 1){
 					this.drawDirectionCanvas(x, y);
 				}else if(this.debugCanvasInfo == 2){
@@ -1017,6 +1053,7 @@ console.log(this.spritesEraser)
 		}catch(e){
 			console.error(e);
 		}
+		selInfo.direction = defDir;
 	},
 	
 	/**
@@ -1637,19 +1674,18 @@ console.log(this.spritesEraser)
 	 */
 	collectQueryInfoPair: function(rect, preQInfo)
 	{
-		var x, y, cx, ch, cw
-			, chunked = []
+		var x, y, cx
+			, chunked = [], vchunked = []
 			, cunkedRect = [], self = this
 			, base = this.cellrects.base
-			, pos ,q, preq
+			, pos ,q
 			, currentQInfo = this.makeCanvasQueryInfo('', MR(-1, -1, 1, 1))
-			, currentRect, chunkedCount
+			, chunkedCount = 0
 			, currentStack = []
 			, pairCount = 0
 			, diff, recursiveResult, recursiveRect
 			, erect = this.enebleRect()
 			, queries = this.canvasQueries
-			, optstr
 			
 			, diffQueryInfo = function(b){
 				var result = {}, a = current();
@@ -1666,11 +1702,51 @@ console.log(this.spritesEraser)
 				cunkedRect.push(qinfo.rect);
 				clearCurrent();
 			}
+			, compressV = function(chunked){
+				var count = 0, preQuery = '', current, i, j, reschunk = [], qstr
+					, searchLen, sourceLen
+				;
+				sourceLen = chunked.length;
+				for(j = 0; j < sourceLen; j++){
+				debugger
+					preQuery = chunked.shift();
+					if(preQuery == null){
+						break;
+					}
+					searchLen = chunked.length;
+					for(i = 0; i < searchLen; i++){
+						current = chunked.shift();
+						if(current == null){
+							break;
+						}
+						if(preQuery.join(SPQ_DELIMITER) == current.join(SPQ_DELIMITER)){
+							count++;
+						}else{
+							chunked.unshift(current);
+							break;
+						}
+					}
+				debugger
+					if(count > 0){
+						qstr = preQuery.join(SPQ_DELIMITER);
+						qstr = preQuery.length > 1 ? '(' + qstr + ')' : qstr;
+						preQuery = [qstr + '^' + (count + 1) + '!'];
+						count = 0;
+					}
+					if(preQuery != null){
+						reschunk.push(preQuery);
+					}
+				}
+				return reschunk;
+			}
 			, chunkJoin = function(chunked){
+				var reg = new RegExp('' + SPQ_NEWLINE + '{2,}', 'g')
+					;
 				chunked = chunked.map(function(a){
-					return a.join(' ');
+					var q = a.join(SPQ_DELIMITER);
+					return q;
 				});
-				return chunked.join(';');
+				return chunked.join(SPQ_NEWLINE).replace(reg, SPQ_BOTTOMLINE);
 			}
 			, stackCurrent = function(qinfo){
 				currentStack.push(qinfo);
@@ -1688,32 +1764,28 @@ console.log(this.spritesEraser)
 			, getQueries = function(x, y){
 				var pos = x + (y * base.w)
 					, q = self.canvasQueries[pos]
-					, c = self.canvasPuts[pos];
+					, c = self.canvasPuts[pos]
+					, d = self.canvasDirections[pos];
 					
 				c = c < 0 ? self.bgPaletteId : c;
 				if(self.isEmptyCanvasQueryInfo(q)){
-					return self.makeCanvasQueryInfo(c, MR(x, y, 1, 1));
+					return self.makeCanvasQueryInfo(c + d, MR(x, y, 1, 1));
 				}
-				 return q;
-
+				return self.makeCanvasQueryInfo(q.query + d, q.rect);
 			}
 		;
 		rect = rect == null ? erect : MR(rect.convertString());
-		debugger
-		// ch = currentQInfo.rect.h;
-		// cw = currentQInfo.rect.w;
 		
 		for(y = rect.y; y < rect.ey; y += current().rect.h){
-			chunked.push([]);
-			chunkedCount = chunked.length - 1;
+			// chunked.push([]);
+			// chunkedCount = chunked.length - 1;
+			chunked[chunkedCount] = [];
 			pairCount = 0;
 			clearCurrent();//
-			
 			currentQInfo = this.makeCanvasQueryInfo('', MR(-1, -1, 1, 1));
+			
 			for(x = rect.x; x < rect.ex; x += current().rect.w){
-				// pos = x + (y * base.w);
 				//クエリ情報の取得
-				// q = queries[pos];
 				q = getQueries(x, y);
 				//からっぽクエリは背景IDとする
 				if(this.isEmptyCanvasQueryInfo(q)){
@@ -1738,8 +1810,6 @@ console.log(this.spritesEraser)
 				//大きい塊なら戻って合成
 				if(diff.diff_h > 0){
 					if(preQInfo != null){
-						// rect.w = x - rect.x;
-						// rect.reculc();
 						rect.ex = x;
 						break;
 					}
@@ -1749,7 +1819,6 @@ console.log(this.spritesEraser)
 					recursiveResult = this.collectQueryInfoPair(recursiveRect, current());
 					clearCurrent();
 					stackCurrent(this.makeCanvasQueryInfo('(' + recursiveResult.chunked + ')', MR([cx, y, recursiveResult.x, recursiveResult.y].join(' ') + ' :pos')));
-					// x = recursiveResult.x;
 					
 				}
 				//小さい塊ならその後を合成
@@ -1758,7 +1827,6 @@ console.log(this.spritesEraser)
 					recursiveRect = MR(x, y, rect.ex - x, current().rect.h);
 					recursiveResult = this.collectQueryInfoPair(recursiveRect, current());
 					q = this.makeCanvasQueryInfo('(' + recursiveResult.chunked + ')', MR([x, y, recursiveResult.x, recursiveResult.y].join(' ') + ' :pos'));
-					// x = recursiveResult.x;
 				}
 				diff = diffQueryInfo(q);
 				//合成クエリが同じ
@@ -1772,14 +1840,16 @@ console.log(this.spritesEraser)
 				stackCurrent(q);
 				q = null;
 			}
-			// if(q != null){
 			if(x >= rect.ex){
 				q = current(); //とっておく
 				chunkQinfo(current(), currentLength());
 				stackCurrent(q);
 				q = null;
 			}
+			chunkedCount += current().rect.h;
 		}
+		
+		chunked = compressV(chunked);
 
 		return {chunked: chunkJoin(chunked), x: x - current().rect.w, y: y - current().rect.h};
 	},
@@ -1808,13 +1878,12 @@ console.log(this.spritesEraser)
 			asset.y = pre.y;
 			return;
 		}
-		this.putSpritePalette(pre.x, pre.y, this.selectedInfo.direction);
+		this.putSpritePalette(pre.x, pre.y);
 		// TODO canvasQueryInfoからペアを探す
-		finded = this.scanPaletteChunks();
-		paired = this.scanCanvasPair(finded);
+		// finded = this.scanPaletteChunks();
+		// paired = this.scanCanvasPair(finded);
 		
-		paird = this.collectQueryInfoPair();
-		console.log(paird)
+		paired = this.collectQueryInfoPair();
 		// this.scanCanvasChunks(finded);
 		if(this.debugCanvasInfo == 1){
 			this.drawDirectionCanvas(pre.x, pre.y);
@@ -1823,8 +1892,10 @@ console.log(this.spritesEraser)
 		}else{
 			this.drawSpritesCanvas(pre.x, pre.y);
 		}
-		aligned = this.alignChunks(paired);
-		this.outputSpriteQueryBatch(aligned);
+		refreshTextArea(paired.chunked)
+		
+		// aligned = this.alignChunks(paired);
+		// this.outputSpriteQueryBatch(aligned);
 		
 		asset.x = x;
 		asset.y = y;
@@ -2047,7 +2118,7 @@ console.log(this.spritesEraser)
 			});
 			
 			//new query
-			if(drawnQuery.indexOf(this.selectedInfo.query) < 0){
+			if(drawnQuery.indexOf(this.selectedInfo.queries[0][0]) < 0){
 				colorCount = drawnQuery.length - 1;
 				// drawnQuery = [];
 			}
@@ -2290,6 +2361,7 @@ console.log(this.spritesEraser)
 		
 	},
 	
+	// TODO 不要
 	/**
 	 * 選択スプライト点滅
 	 */
@@ -2308,7 +2380,7 @@ console.log(this.spritesEraser)
 		if(!bgr.isContain(pos.x, pos.y)){
 			return;
 		}
-		scr.drawSpriteChunk(s, palr.x, palr.y);
+		// scr.drawSpriteChunk(s, palr.x, palr.y);
 		
 	},
 	
