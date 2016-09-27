@@ -774,6 +774,7 @@ SpriteQueryBuilder.prototype = {
 			for(x = sr.x; x < sr.ex; x++){
 				qinfo = this.canvasQueries[x + (y * pw)];
 				if(sr.isOverlap(qinfo.rect)){
+//				if(sr.isFit(qinfo.rect)){
 					selInfo.queries[j][i] = qinfo.query;
 				}else{
 					selInfo.queries[j][i] = this.makeCanvasQueryInfo().query;
@@ -801,15 +802,6 @@ SpriteQueryBuilder.prototype = {
 
 		selInfo.cellsDir = this.directionSortSprites(selInfo.cellsDir, dir);
 		
-		// qinfo = this.canvasQueries[sx + (sy *pw)];
-		// if(sr.isFit(qinfo.rect)){
-			// console.log(qinfo, sx, sy);
-			// selInfo.queries[0][0] = qinfo.query.replace(/\|\S*/, '') + calced.dstr;
-			// selInfo.rect = qinfo.rect;
-		// }else{
-			// selInfo.queries[0][0] = q + calced.dstr;
-			// selInfo.rect = sr;
-		// }
 		selInfo.rect = sr;
 
 		// TODO  this.canvasQueries[sx][sy] = this.selectedQuery;
@@ -821,7 +813,6 @@ SpriteQueryBuilder.prototype = {
 		
 		//重複書き込み防止をリセット
 		this.events.preRefreshCanvasPos = {x: -1, y: -1};
-
 		
 	},
 	
@@ -1702,49 +1693,72 @@ SpriteQueryBuilder.prototype = {
 				cunkedRect.push(qinfo.rect);
 				clearCurrent();
 			}
+			, sliceJoin = function(chunked, len){
+				var delim = len > 1 ? SPQ_BOTTOMLINE : SPQ_NEWLINE
+					, res = [], cp = chunked.slice()
+				;
+		debugger
+				while(cp.length > 0){
+					res.push(cp.splice(0, len).map(function(a){
+						a = a != null ? a : [];
+						return a.join(SPQ_DELIMITER);
+					}).join(delim));
+				}
+				return res;
+				
+			}
 			, compressV = function(chunked){
 				var count = 0, preQuery = '', current, i, j, reschunk = [], qstr
+					, joinRowLen = 1
 					, searchLen, sourceLen
+					, skiped = false
 				;
-				sourceLen = chunked.length;
-				for(j = 0; j < sourceLen; j++){
-				debugger
-					preQuery = chunked.shift();
-					if(preQuery == null){
-						break;
-					}
-					searchLen = chunked.length;
-					for(i = 0; i < searchLen; i++){
-						current = chunked.shift();
-						if(current == null){
-							break;
+					//結合する行を決める(初期は半分以下)
+					sourceLen = chunked.length;
+					
+					for(j = 0; j < sourceLen; j++){
+					debugger
+						preQuery = chunked.shift();
+						if(preQuery == null){
+							skiped = true;
+							continue;
 						}
-						if(preQuery.join(SPQ_DELIMITER) == current.join(SPQ_DELIMITER)){
-							count++;
-						}else{
-							chunked.unshift(current);
-							break;
+						searchLen = chunked.length;
+						for(i = 0; i < searchLen; i++){
+							current = chunked.shift();
+							if(current == null){
+								skiped = true;
+								continue;
+							}
+							if(preQuery.join(SPQ_DELIMITER) == current.join(SPQ_DELIMITER)){
+								count++;
+							}else{
+								chunked.unshift(current);
+								break;
+							}
+						}
+						if(count > 0){
+							qstr = preQuery.join(SPQ_DELIMITER);
+							qstr = preQuery.length > 1 ? '(' + qstr + ')' : qstr;
+							preQuery = [qstr + '^' + (count + 1) + '!'];
+							count = 0;
+						}
+						if(preQuery != null){
+							reschunk.push(preQuery);
+						}
+						if(skiped){
+							reschunk.push([""]);
+							skiped = false;
 						}
 					}
-				debugger
-					if(count > 0){
-						qstr = preQuery.join(SPQ_DELIMITER);
-						qstr = preQuery.length > 1 ? '(' + qstr + ')' : qstr;
-						preQuery = [qstr + '^' + (count + 1) + '!'];
-						count = 0;
-					}
-					if(preQuery != null){
-						reschunk.push(preQuery);
-					}
-				}
 				return reschunk;
 			}
 			, chunkJoin = function(chunked){
 				var reg = new RegExp('' + SPQ_NEWLINE + '{2,}', 'g')
 					;
 				chunked = chunked.map(function(a){
-					var q = a.join(SPQ_DELIMITER);
-					return q;
+					a = a != null ? a : [];
+					return a.join(SPQ_DELIMITER);
 				});
 				return chunked.join(SPQ_NEWLINE).replace(reg, SPQ_BOTTOMLINE);
 			}
@@ -1777,8 +1791,6 @@ SpriteQueryBuilder.prototype = {
 		rect = rect == null ? erect : MR(rect.convertString());
 		
 		for(y = rect.y; y < rect.ey; y += current().rect.h){
-			// chunked.push([]);
-			// chunkedCount = chunked.length - 1;
 			chunked[chunkedCount] = [];
 			pairCount = 0;
 			clearCurrent();//
@@ -1787,6 +1799,7 @@ SpriteQueryBuilder.prototype = {
 			for(x = rect.x; x < rect.ex; x += current().rect.w){
 				//クエリ情報の取得
 				q = getQueries(x, y);
+//					debugger
 				//からっぽクエリは背景IDとする
 				if(this.isEmptyCanvasQueryInfo(q)){
 					q = this.makeCanvasQueryInfo(this.bgPaletteId, MR(x, y, 1, 1));
@@ -1848,7 +1861,6 @@ SpriteQueryBuilder.prototype = {
 			}
 			chunkedCount += current().rect.h;
 		}
-		
 		chunked = compressV(chunked);
 
 		return {chunked: chunkJoin(chunked), x: x - current().rect.w, y: y - current().rect.h};
@@ -1869,13 +1881,12 @@ SpriteQueryBuilder.prototype = {
 			, asset = this.events.asSetRefreshCanvasPos
 			, finded, paired, aligned
 		;
-		
-		if(x == asset.x && y == asset.y){
-			return;
-		}
 		if(pre.x < 0 || pre.y < 0){
 			asset.x = pre.x;
 			asset.y = pre.y;
+			return;
+		}
+		if(x == asset.x && y == asset.y){
 			return;
 		}
 		this.putSpritePalette(pre.x, pre.y);
