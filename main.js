@@ -188,7 +188,8 @@ SpriteQueryBuilder.prototype = {
 				self.openSpriteImage(this);
 			};
 			
-			self.keyControll.initCommonKey();
+//			self.keyControll.initCommonKey();
+			self.keyControll.initDefaultKey('left');
 			self.keyControll.setKey('ext', 16);
 			self.keyControll.setKey('enter', 13);
 			self.keyControll.unsetKey('space');
@@ -221,6 +222,7 @@ SpriteQueryBuilder.prototype = {
 				opt = opt == null ? '' : opt;
 			return makeSpriteQuery(self.uiSpriteName, id + opt);
 			}
+		, sp
 		;
 		this.sprites = {
 			select_tl: ms(0),
@@ -239,6 +241,7 @@ SpriteQueryBuilder.prototype = {
 			select_cup_b: ms(null, '8|r2'),
 			select_cup_l: ms(null, '8|r3'),
 			select_bgPalette: ms(5),
+			select_startCursor: ms(5),
 			select_spriteChunk: ms(5),
 			
 			blankbg: ms(9, '*' + this.cellrects.base.w + '^' + this.cellrects.base.h),
@@ -278,24 +281,26 @@ SpriteQueryBuilder.prototype = {
 			debug_fv: ms(55),
 			cursor: ms(5),
 		};
+		sp = this.sprites;
 		
-		for(k in this.sprites){
+		for(k in sp){
 			if(k.search(/^select_\w*/) == -1){
 				continue;
 			}
-			this.sprites['d1_' + k] = copyCanvasSprite(this.sprites[k]);
-			swap(this.sprites['d1_' + k], 'set', glay_l, COLOR_WHITE);
-			this.sprites['d2_' + k] = copyCanvasSprite(this.sprites[k]);
-			swap(this.sprites['d2_' + k], 'set', glay_d, COLOR_WHITE);
+			sp['d1_' + k] = copyCanvasSprite(sp[k]);
+			swap(sp['d1_' + k], 'set', glay_l, COLOR_WHITE);
+			sp['d2_' + k] = copyCanvasSprite(sp[k]);
+			swap(sp['d2_' + k], 'set', glay_d, COLOR_WHITE);
 		}
 
-		swap(this.sprites.select_bgPalette, 'set', [0, 0, 252, 255], COLOR_WHITE);
-		swap(this.sprites.select_spriteChunk, 'set', [248, 216, 120, 255], COLOR_WHITE);
+		swap(sp.select_bgPalette, 'set', COLOR_BLUE, COLOR_WHITE);
+		swap(sp.select_startCursor, 'set', COLOR_RED, COLOR_WHITE);
+		swap(sp.select_spriteChunk, 'set', [248, 216, 120, 255], COLOR_WHITE);
 
-		swap(this.sprites.rotate_u, 'set', glay_d, COLOR_WHITE);
-		swap(this.sprites.flip_v, 'set', glay_d, COLOR_WHITE);
-		swap(this.sprites.flip_h, 'set', glay_d, COLOR_WHITE);
-		swap(this.sprites.select_tranceparent_off, 'set', glay_d, COLOR_WHITE);
+		swap(sp.rotate_u, 'set', glay_d, COLOR_WHITE);
+		swap(sp.flip_v, 'set', glay_d, COLOR_WHITE);
+		swap(sp.flip_h, 'set', glay_d, COLOR_WHITE);
+		swap(sp.select_tranceparent_off, 'set', glay_d, COLOR_WHITE);
 		
 		this.initQinfoSprites();
 	},
@@ -773,8 +778,7 @@ SpriteQueryBuilder.prototype = {
 			q[j] = [];
 			for(x = sr.x; x < sr.ex; x++){
 				qinfo = this.canvasQueries[x + (y * pw)];
-				if(sr.isOverlap(qinfo.rect)){
-//				if(sr.isFit(qinfo.rect)){
+				if(sr.isContain(qinfo.rect)){
 					selInfo.queries[j][i] = qinfo.query;
 				}else{
 					selInfo.queries[j][i] = this.makeCanvasQueryInfo().query;
@@ -784,7 +788,7 @@ SpriteQueryBuilder.prototype = {
 				selected[j][i] = id;
 				dstr = this.canvasDirections[x + (y * pw)];
 				seldir[j][i] = dstr;
-				spr = makeSprite(img, id);
+				spr = id >= 0 ? makeSprite(img, id) : this.sprites.blank;
 				calced = this.calcDirection(dstr, dir, 'object');
 				
 				this.setSelected(spr, calced, i, j);
@@ -1320,260 +1324,6 @@ SpriteQueryBuilder.prototype = {
 		return chunked;
 	},
 	
-	// TODO 先に細かいペアを整理する
-	scanCanvasPair: function(finded){
-		var puts = this.canvasPuts
-			, find, find_first, id = -1, idStack = [], paired = {}, vPaired = {}
-			, rect = this.getBuildCellsRect()
-			, range = this.enableRange(puts, rect)
-			, erect = MR([range.l, range.t, range.r, range.b].join(' ') + ' :pos')
-			, cw = rect.w
-			, i, f, q, r, s, x, y, pcnt = 0
-			, qsearch = function(x, y){
-				var chunks, q, i, ck;
-				for(q in finded){
-					chunks = finded[q];
-					for(i = 0; i < chunks.length; i++){
-						ck = chunks[i];
-						if(ck.x == x && ck.y == y){
-							return q;
-						}
-						if(ck.isContain(x, y)){
-							return null;
-						}
-					}
-				}
-				return "single";
-			}
-			, psearch = function(x, y){
-				var chunks, q, i, ck;
-				for(q in paired){
-					chunks = paired[q];
-					for(i = 0; i < chunks.length; i++){
-						ck = chunks[i];
-						if(ck.x == x && ck.y == y){
-							return q;
-						}
-						if(ck.isContain(x, y)){
-							return null;
-						}
-					}
-				}
-				return "single";
-			}			
-			, doIdPairStack = function(id, stack, paired_y, x, mode)
-			{
-				//idとstackが違うときにスタックする
-				var slen = stack.length;
-				if(id == stack[0] || slen == 0){
-					return stack;
-				}
-				if(stack[0].match(/[:\+]/) != null){
-					paired_y[x] = slen == 1 ? stack[0] : '(' + stack[0] + ')' + mode + slen;
-					// paired_y[x] = stack[0];
-					stack = [];
-				}else if(id != stack[0]){
-					// console.log(paired_y, x);
-					paired_y[x] = slen == 1 ? stack[0] : stack[0] + mode + slen;
-					stack = [];
-				}
-				return stack;
-			}
-		;
-
-		for(y = erect.y; y < erect.ey; y++){
-			paired[y] = {};
-			find_first = -1;
-			for(x = erect.x; x < erect.ex; x++){
-				find = qsearch(x, y);
-				if(find === null){
-					continue;
-				}
-				//idをカウント
-				id = find === 'single' ? puts[x + (cw * y)] + '' : find;
-				idStack = doIdPairStack(id, idStack, paired[y], find_first, '*');
-				find_first = idStack.length == 0 ? x : find_first;
-				idStack.push(id);
-			}
-			if(Object.keys(paired[y]).length > 0 || id !== null){
-				//idをわざとずらして末端処理
-				idStack = doIdPairStack(id + 1, idStack, paired[y], find_first, '*');
-			}
-			id = null;
-		}
-// console.log(paired)
-		// TODO 縦の圧縮？
-		idStack = [];
-		id = '-1';
-		for(x = erect.x; x < erect.ex; x++){
-			find_first = -1;
-			for(y = erect.y; y < erect.ey; y++){
-				// debugger;
-				if(paired[y] == null){continue;}
-				//縦ペア初期化
-				vPaired[y] = vPaired[y] == null ? {} : vPaired[y];
-				find = psearch(x, y);
-				if(find === null){
-					continue;
-				}
-				//idをカウント
-				id = find === 'single' ? paired[y][x] : find;
-				if(id == null){
-					continue;
-				}
-				
-			// console.log(vPaired, paired, idStack, x, y,  find, find_first);
-				//ペア出力をスタック＆idStackを更新
-				idStack = doIdPairStack(id, idStack, vPaired[find_first], x, '^');
-
-				//最初にidが見つかった位置
-				find_first = idStack.length == 0 ? y : find_first;
-				idStack.push(id);
-				// console.log(paired, paired[y][x], y, x, id, find_first, find, idStack)
-					// console.log(find, vPaired[y], idStack)
-			// console.log(vPaired, idStack, y,  find, find_first);
-			}
-			if(find_first == -1){
-				continue;
-			}
-			//idをわざとずらして末端処理
-			if(id !== null || Object.keys(vPaired[find_first]).length > 0){
-				idStack = doIdPairStack(id + 1, idStack, vPaired[find_first], x, '^');
-			}
-			id = null;
-		}
-		
-		for(i in vPaired){
-			if(Object.keys(vPaired[i]).length == 0){
-				delete vPaired[i];
-			}
-		}
-		
-		// console.log(vPaired)
-		return vPaired;
-	},
-	/**
-	 * 配置周辺のペアをスキャン
-	 * @param {findedChunks} finded
-	 */
-	//TODO 要検証
-	scanCanvasChunks: function(finded){
-		// console.log(finded);
-		// return;
-		var cqueries = this.compressQueries
-			// , comp = finded
-			, sorted = this.sortedQueries
-			, puts = this.canvasPuts
-			, chunked = {h: [], v: []}
-			, find = null, preFind
-			// , finded = {}, find
-			, rect = this.getBuildCellsRect()
-			, range = this.enableRange(puts, rect)
-			, erect = MR([range.l, range.t, range.r, range.b].join(' ') + ' :pos')
-			, cw = range.r - range.l
-			, i, f, q, r, s, x, y, pcnt = 0
-			//位置から登録済みchunkを見つける
-			, search = function(x, y, findedChunks){
-				var chunks, q, i;// finded = findedChunks;
-				for(q in finded){
-					chunks = finded[q];
-					for(i = 0; i < chunks.length; i++){
-						if(chunks[i].x == x && chunks[i].y == y){
-							// console.log(chunks[i]);
-							return chunks[i];
-						}
-					}
-				}
-				return null;
-			}
-			//横のペア数を検出 source:findedChunk
-			, hPairSkip = function(s){
-				var x, y = s.y, f, cnt = 0, q;
-				for(x = s.x; x < erect.ex; x++){
-					f = search(x, y, finded);
-					q = f === null ? puts[x + (cw * y)] : f.query;
-					if(q == s.query){
-						cnt++;
-					}else{
-						break;
-					}
-				}
-				return cnt * s.w;
-			}
-			//縦のペア数を検出 source:findedChunk 
-			, vPairSkip = function(s){
-				var x = s.x, y, f, cnt = 0, q;
-				for(y = s.y; y < erect.ey; y++){
-					f = search(x, y, finded);
-					q = f === null ? puts[x + (cw * y)] : f.query;
-					if(q == s.query){
-						cnt++;
-					}else{
-						break;
-					}
-				}
-				return cnt * s.w;
-			}
-			// finded:findedChunk r: Rect
-			, overlap = function(finded, r){
-				var f, len, i, cr;
-				for(f in finded){
-					cr = finded[f];
-					len = cr.length;
-					for(i = 0; i < len; i++){
-						if(cr[i] == null){
-							continue;
-						}
-						if(cr[i].isFit(r) || cr[i].isOverlap(r)){
-							return true;
-						}
-					}
-				}
-				return false;
-			}
-		;
-		console.log('holizon')
-		for(y = erect.y; y < erect.ey; y++){
-			for(x = erect.x; x < erect.ex; x++){
-				preFind = find;
-				find = search(x, y, finded);
-				id = puts[x + (cw * y)];
-				find = find === null ? MR(x, y, 1, 1) : find;
-				
-				pcnt = hPairSkip(find);
-				
-				if(!overlap(finded, find)){
-					// finded.h.push({count: pcnt, query: find.query, x: x, y: y});
-					chunked.h.push(find);
-					// finded[x + ' ' + y] = [find];
-				}
-				console.log(pcnt);
-				x += pcnt;
-			}
-		}
-		// console.log(chunked, finded);
-		// return chunked;
-		
-		console.log('vertical')
-		for(x = erect.x; x < erect.ex; x++){
-			for(y = erect.y; y < erect.ey; y++){
-				find = search(x, y, chunked);
-				id = puts[x + (cw * y)];
-				find = find === null ? MR(x, y, 1, 1) : find;
-				pcnt = vPairSkip(find);
-				if(!overlap(finded, find)){
-					chunked.v.push(find);
-					// finded[x + ' ' + y] = [find];
-					// finded.v.push({count: pcnt, query: find.query, x: x, y: y});
-				}
-				console.log(pcnt);
-				y += pcnt;
-			}
-		}
-		
-		console.log(chunked, finded);
-		return chunked;
-	},
 	
 	/**
 	 * クエリごとの配置をスキャン
@@ -1665,205 +1415,256 @@ SpriteQueryBuilder.prototype = {
 	 */
 	collectQueryInfoPair: function(rect, preQInfo)
 	{
-		var x, y, cx
-			, chunked = [], vchunked = []
-			, cunkedRect = [], self = this
-			, base = this.cellrects.base
+		var 
+		disassemblies = [] //分解することになったRect達
+		, self = this
+		, base = this.cellrects.base
+		, erect = this.enebleRect()
+		, queries = this.canvasQueries
+
+		, recursive = function(rect, preQInfo){
+			var x, y, cx
+			, chunked = [] //組み合わせ結果
+			, refresh = false
+			, cunkedRect = [] //組み込まれたRectの記録
 			, pos ,q
-			, currentQInfo = this.makeCanvasQueryInfo('', MR(-1, -1, 1, 1))
 			, chunkedCount = 0
 			, currentStack = []
-			, pairCount = 0
 			, diff, recursiveResult, recursiveRect
-			, erect = this.enebleRect()
-			, queries = this.canvasQueries
-			
 			, diffQueryInfo = function(b){
-				var result = {}, a = current();
-				result.queryEqual = a.query == b.query;
-				result.rectEqual = a.rect.isFit(b.rect);
-				result.diff_w = b.rect.w - a.rect.w;
-				result.diff_h = b.rect.h - a.rect.h;
-				
-				return result;
-			}
-			, chunkQinfo = function(qinfo, cnt){
-				var optstr = cnt > 1 ? '*' + (cnt) : '';
-				chunked[chunkedCount].push(qinfo.query + optstr);
-				cunkedRect.push(qinfo.rect);
-				clearCurrent();
-			}
-			, sliceJoin = function(chunked, len){
-				var delim = len > 1 ? SPQ_BOTTOMLINE : SPQ_NEWLINE
-					, res = [], cp = chunked.slice()
-				;
-		debugger
-				while(cp.length > 0){
-					res.push(cp.splice(0, len).map(function(a){
-						a = a != null ? a : [];
-						return a.join(SPQ_DELIMITER);
-					}).join(delim));
-				}
-				return res;
-				
-			}
-			, compressV = function(chunked){
-				var count = 0, preQuery = '', current, i, j, reschunk = [], qstr
-					, joinRowLen = 1
-					, searchLen, sourceLen
-					, skiped = false
-				;
-					//結合する行を決める(初期は半分以下)
-					sourceLen = chunked.length;
-					
-					for(j = 0; j < sourceLen; j++){
-					debugger
-						preQuery = chunked.shift();
-						if(preQuery == null){
-							skiped = true;
-							continue;
-						}
-						searchLen = chunked.length;
-						for(i = 0; i < searchLen; i++){
-							current = chunked.shift();
-							if(current == null){
-								skiped = true;
-								continue;
-							}
-							if(preQuery.join(SPQ_DELIMITER) == current.join(SPQ_DELIMITER)){
-								count++;
-							}else{
-								chunked.unshift(current);
-								break;
-							}
-						}
-						if(count > 0){
-							qstr = preQuery.join(SPQ_DELIMITER);
-							qstr = preQuery.length > 1 ? '(' + qstr + ')' : qstr;
-							preQuery = [qstr + '^' + (count + 1) + '!'];
-							count = 0;
-						}
-						if(preQuery != null){
-							reschunk.push(preQuery);
-						}
-						if(skiped){
-							reschunk.push([""]);
-							skiped = false;
-						}
-					}
-				return reschunk;
-			}
-			, chunkJoin = function(chunked){
-				var reg = new RegExp('' + SPQ_NEWLINE + '{2,}', 'g')
-					;
-				chunked = chunked.map(function(a){
-					a = a != null ? a : [];
-					return a.join(SPQ_DELIMITER);
-				});
-				return chunked.join(SPQ_NEWLINE).replace(reg, SPQ_BOTTOMLINE);
-			}
-			, stackCurrent = function(qinfo){
-				currentStack.push(qinfo);
-			}
-			, currentLength = function(){
-				return currentStack.length;
-			}
-			, clearCurrent = function(){
-				return currentStack = [];
-			}
-			, current = function(){
-				var len = currentStack.length;
-				return len > 0 ? currentStack[currentStack.length - 1] : self.makeCanvasQueryInfo('', MR(-1, -1, 1, 1))
-			}
-			, getQueries = function(x, y){
-				var pos = x + (y * base.w)
-					, q = self.canvasQueries[pos]
-					, c = self.canvasPuts[pos]
-					, d = self.canvasDirections[pos];
-					
-				c = c < 0 ? self.bgPaletteId : c;
-				if(self.isEmptyCanvasQueryInfo(q)){
-					return self.makeCanvasQueryInfo(c + d, MR(x, y, 1, 1));
-				}
-				return self.makeCanvasQueryInfo(q.query + d, q.rect);
-			}
-		;
-		rect = rect == null ? erect : MR(rect.convertString());
-		
-		for(y = rect.y; y < rect.ey; y += current().rect.h){
-			chunked[chunkedCount] = [];
-			pairCount = 0;
-			clearCurrent();//
-			currentQInfo = this.makeCanvasQueryInfo('', MR(-1, -1, 1, 1));
-			
-			for(x = rect.x; x < rect.ex; x += current().rect.w){
-				//クエリ情報の取得
-				q = getQueries(x, y);
-//					debugger
-				//からっぽクエリは背景IDとする
-				if(this.isEmptyCanvasQueryInfo(q)){
-					q = this.makeCanvasQueryInfo(this.bgPaletteId, MR(x, y, 1, 1));
-				}
-				//前回のと比較する
-				
-				//前回がからっぽならそのまま
-				if(currentLength() == 0){
-					stackCurrent(q);
-					continue;
-				}
-				
-				diff = diffQueryInfo(q);
-				
-				//クエリが同じ
-				if(diff.queryEqual){
-					stackCurrent(q);
-					continue;
-				}
-				
-				//大きい塊なら戻って合成
-				if(diff.diff_h > 0){
-					if(preQInfo != null){
-						rect.ex = x;
-						break;
-					}
-					currentQInfo = current();
-					cx = x - (current().rect.w * currentLength());
-					recursiveRect = MR(cx, y, x - cx, q.rect.h);
-					recursiveResult = this.collectQueryInfoPair(recursiveRect, current());
-					clearCurrent();
-					stackCurrent(this.makeCanvasQueryInfo('(' + recursiveResult.chunked + ')', MR([cx, y, recursiveResult.x, recursiveResult.y].join(' ') + ' :pos')));
-					
-				}
-				//小さい塊ならその後を合成
-				if(diff.diff_h < 0){
-					currentQInfo = current();
-					recursiveRect = MR(x, y, rect.ex - x, current().rect.h);
-					recursiveResult = this.collectQueryInfoPair(recursiveRect, current());
-					q = this.makeCanvasQueryInfo('(' + recursiveResult.chunked + ')', MR([x, y, recursiveResult.x, recursiveResult.y].join(' ') + ' :pos'));
-				}
-				diff = diffQueryInfo(q);
-				//合成クエリが同じ
-				if(diff.queryEqual){
-					stackCurrent(q);
-					continue;
-				}
-				
-				//同じ大きさ
-				chunkQinfo(current(), currentLength());
-				stackCurrent(q);
-				q = null;
-			}
-			if(x >= rect.ex){
-				q = current(); //とっておく
-				chunkQinfo(current(), currentLength());
-				stackCurrent(q);
-				q = null;
-			}
-			chunkedCount += current().rect.h;
-		}
-		chunked = compressV(chunked);
+				   var result = {}, a = current();
+				   result.queryEqual = a.query == b.query;
+				   result.rectEqual = a.rect.isFit(b.rect);
+				   result.diff_w = b.rect.w - a.rect.w;
+				   result.diff_h = b.rect.h - a.rect.h;
 
-		return {chunked: chunkJoin(chunked), x: x - current().rect.w, y: y - current().rect.h};
+				   return result;
+			   }
+			   , chunkQinfo = function(qinfo, cnt){
+				   var optstr = cnt > 1 ? '*' + (cnt) : '';
+				   chunked[chunkedCount].push(qinfo.query + optstr);
+				   cunkedRect.push(qinfo.rect);
+				   clearCurrent();
+			   }
+			   , clearChunkedQinfo = function(row){
+				   chunked[row] = [];
+			   }
+			   , isDisassemble = function(qinfo){
+				   return disassemblies.some(function(a){
+					   return a.isFit(qinfo.rect);
+				   });
+			   }
+			   , chunkJoin = function(chunked){
+				   var reg = new RegExp('' + SPQ_NEWLINE + '{2,}', 'g')
+					   ;
+				   chunked = chunked.map(function(a){
+					   a = a != null ? a : [];
+					   return a.join(SPQ_DELIMITER);
+				   });
+				   return chunked.join(SPQ_NEWLINE).replace(reg, SPQ_BOTTOMLINE);
+			   }
+			   , stackCurrent = function(qinfo){
+				   currentStack.push(qinfo);
+			   }
+			   , currentLength = function(){
+				   return currentStack.length;
+			   }
+			   , clearCurrent = function(){
+				   return currentStack = [];
+			   }
+			   , setCurrent = function(q){
+				   return currentStack = [q];
+			   }
+			   , current = function(){
+				   var len = currentStack.length;
+				   return len > 0 ? currentStack[currentStack.length - 1] : self.makeCanvasQueryInfo('', MR(-1, -1, 1, 1))
+			   }
+			   , resultToQinfo = function(result, x, y){
+				return self.makeCanvasQueryInfo('(' + result.chunked + ')', result.rect);
+			   }
+			   , getIdQueries = function(x, y){
+				   var pos = x + (y * base.w)
+					   , c = self.canvasPuts[pos]
+					   , d = self.canvasDirections[pos];
+
+				   ;
+				   return self.makeCanvasQueryInfo(c + d, MR(x, y, 1, 1));
+			   }
+			   , getQueries = function(x, y){
+				   var pos = x + (y * base.w)
+					   , q = self.canvasQueries[pos]
+					   , c = self.canvasPuts[pos]
+					   , d = self.canvasDirections[pos];
+
+				   c = c < 0 ? self.bgPaletteId : c;
+				   if(isDisassemble(q) || self.isEmptyCanvasQueryInfo(q)){
+					   return self.makeCanvasQueryInfo(c + d, MR(x, y, 1, 1));
+				   }
+				   return self.makeCanvasQueryInfo(q.query + d, q.rect);
+			   }
+			   , rechunkInRect = function(rerect){
+				   var result
+				   ;
+					clearChunkedQinfo(rerect.y);
+					result = recursive(rerect, current());
+					if(result.chunked == null){
+						result = rechunkInRect(MR(result.rect.toString));
+					}
+					q = resultToQinfo(result);
+					setCurrent(q);
+					return q;
+			   }
+			   , arrangeVertical = function(q, rect, x, y){
+					//スタートするxを返す
+					var diff ,cx, recursiveRect, recursiveResult
+					;
+   					//前回のと比較する
+					diff = diffQueryInfo(q);
+
+					//クエリが同じ
+					if(diff.queryEqual){
+						stackCurrent(q);
+						return x;
+					}
+					
+					//大きい塊なら戻って合成
+					//TODO x=0から大きな塊をつくってやりなおし
+					//TODO 同じy位置のものは取っ払って入れ替え
+					if(diff.diff_h > 0){
+						cx = x - (current().rect.w * currentLength());
+						recursiveRect = MR(cx, y, x - cx, q.rect.h);
+						//段の最初から直後までを再構築
+						recursiveResult = recursive(recursiveRect, current());
+//						if(recursiveResult.chunked === null){
+//							rechunkInRect(MR([rect.x, rect.y, recursiveResult.rect.ex - 1, recursiveResult.rect.ey - 1].join(' ') + ' :pos'));
+//							return rect.x;
+//						}
+//						arrangeVertical(q, rect, x, y);
+						setCurrent(self.makeCanvasQueryInfo('(' + recursiveResult.chunked + ')', recursiveResult.rect));
+//						q = self.makeCanvasQueryInfo('(' + recursiveResult.chunked + ')', recursiveResult.rect);
+//						setCurrent(q);
+//						stackCurrent(self.makeCanvasQueryInfo('(' + recursiveResult.chunked + ')', recursiveResult.rect));
+//						rect.reculc(null, null, null, recursiveResult.rect.h);
+						return arrangeVertical(q, rect, x, y);
+
+					}
+					//小さい塊ならその後を合成
+					else if(diff.diff_h < 0){
+						recursiveRect = MR(x, y, rect.ex - x, current().rect.h);
+						//段の最初から直前までを再構築
+						recursiveResult = recursive(recursiveRect, current());
+//						if(recursiveResult.chunked === null){
+//							rechunkInRect(MR([rect.x, rect.y, x - 1, recursiveResult.rect.ey - 1].join(' ') + ' :pos'));
+//							return rect.x;
+//						}
+						q = self.makeCanvasQueryInfo('(' + recursiveResult.chunked + ')', recursiveResult.rect);
+//						q = self.makeCanvasQueryInfo(recursiveResult.chunked, recursiveResult.rect);
+//						rect.reculc(null, null, null, q.rect.h);
+						return arrangeVertical(q, rect, x, y);
+					}
+					
+					chunkQinfo(current(), currentLength());
+					stackCurrent(q);
+					q = null;
+					
+					return -1;
+			   }
+			   , compressV = function(chunked){
+				   var count = 0, preQuery = '', current, i, j, reschunk = [], qstr
+					   , joinRowLen = 1
+					   , searchLen, sourceLen
+					   , skiped = false
+				   ;
+					   //結合する行を決める(初期は半分以下)
+					   sourceLen = chunked.length;
+
+					   for(j = 0; j < sourceLen; j++){
+						   preQuery = chunked.shift();
+						   if(preQuery == null){
+							   skiped = true;
+							   continue;
+						   }
+						   searchLen = chunked.length;
+						   for(i = 0; i < searchLen; i++){
+							   current = chunked.shift();
+							   if(current == null){
+								   skiped = true;
+								   continue;
+							   }
+							   if(preQuery.join(SPQ_DELIMITER) == current.join(SPQ_DELIMITER)){
+								   count++;
+							   }else{
+								   chunked.unshift(current);
+								   break;
+							   }
+						   }
+						   if(count > 0){
+							   qstr = preQuery.join(SPQ_DELIMITER);
+							   qstr = preQuery.length > 1 ? '(' + qstr + ')' : qstr;
+							   preQuery = [qstr + '^' + (count + 1) + '!'];
+							   count = 0;
+						   }
+						   if(preQuery != null){
+							   reschunk.push(preQuery);
+						   }
+						   if(skiped){
+							   reschunk.push([""]);
+							   skiped = false;
+						   }
+					   }
+				   return reschunk;
+			   }
+			;
+			rect = rect == null ? erect : MR(rect.convertString());
+
+			for(y = rect.y; y < rect.ey; y += current().rect.h){
+				chunked[chunkedCount] = [];
+				clearCurrent();//
+				debugger
+				for(x = rect.x; x < rect.ex; x += current().rect.w){
+					//クエリ情報の取得
+					q = getQueries(x, y);
+	//					debugger
+					//からっぽクエリは背景IDとする
+					if(self.isEmptyCanvasQueryInfo(q)){
+						q = self.makeCanvasQueryInfo(self.bgPaletteId, MR(x, y, 1, 1));
+					}
+					
+					//クエリが走査範囲からはみ出ている
+					if(rect.ey < y + q.rect.h){
+						recursiveRect = MR([rect.x, rect.y, x + q.rect.w - 1, y + q.rect.h - 1].join(' ') + ' :pos');
+						rect = recursiveRect;
+//						continue;
+//						recursiveRect = MR([rect.x, rect.y, x + q.rect.w - 1, y + q.rect.h - 1].join(' ') + ' :pos');
+//						return {chunked: null, rect: recursiveRect};
+					}
+
+					//前回がからっぽならそのまま
+					if(currentLength() == 0){
+						stackCurrent(q);
+						continue;
+					}
+					
+					cx = arrangeVertical(q, rect, x, y);
+					x = cx >= 0 ? cx : x;
+
+				}
+				//xが最後まで到達
+				if(x >= rect.ex){
+					q = current(); //とっておく
+					chunkQinfo(current(), currentLength());
+					stackCurrent(q);
+					q = null;
+				}
+				chunkedCount += current().rect.h;
+			}
+			chunked = compressV(chunked);
+
+			return {chunked: chunkJoin(chunked), rect: MR([rect.x, rect.y, x - 1, y - 1].join(' ') + ' :pos')};				
+		}
+		;
+		return recursive();
+
 	},
 	
 	/**
@@ -2021,30 +1822,6 @@ SpriteQueryBuilder.prototype = {
 		bg.drawSpriteChunk(el, r.x, r.y);
 		bg.drawSpriteChunk(sl, r.x, r.y);
 	},
-
-	// drawSelectedBg: function()
-	// {
-		// var bg = SCROLL.bg3
-			// , r = this.rects.directionPalette
-		// ;
-		// bg.clear(null, r);
-		// bg.drawSpriteChunk(this.selectedSpritesBg, r.x, r.y);
-	// },
-	
-	// drawSelectedSingle: function()
-	// {
-		// var bg = SCROLL.bg3
-			// , r = this.rects.directionPalette
-			// , r1 = this.rects.selectedSingle
-			// , sprite = copyCanvasSprite(this.selectedSpritesSingle)
-		// ;
-		// bg.clear(null, r1);
-// 		
-		// sprite.rot(this.selectedDirection.rot);
-		// sprite.vflip(this.selectedDirection.flip_v);
-		// sprite.hflip(this.selectedDirection.flip_h);
-		// bg.drawSpriteChunk(sprite, r.x + cto(1), r.y + cto(1));
-	// },
 	
 	drawSpritesCanvas: function(x, y){
 		var bg1 = SCROLL.bg1
@@ -2251,8 +2028,15 @@ SpriteQueryBuilder.prototype = {
 
 	drawPaletteCursor: function(){
 		var tpos = this.ppControll.getMovePos()
-			, bg3 = SCROLL.bg3
-			, r = this.rects.spritePalette
+		, rpos = this.cpControll.getStartPos('right')
+		, lpos = this.cpControll.getStartPos('left')
+		, state = {right: this.cpControll.getState('right') , left: this.cpControll.getState('left')}
+		, bg3 = SCROLL.bg3
+		, cellPos = {
+			left: {x: parseCell(lpos.x), y: parseCell(lpos.y)}
+			, right: {x: parseCell(rpos.x), y: parseCell(rpos.y)}
+		}
+		, r = this.rects.spritePalette
 		;
 		if(this.appClock % 2 == 0){
 			return;
@@ -2262,15 +2046,22 @@ SpriteQueryBuilder.prototype = {
 		}
 		this.outputCellpos(tocellh(tpos.x - r.x), tocellh(tpos.y - r.y));
 		
+		if(state.right){
+			SCROLL.sprite.drawSpriteChunk(this.sprites.select_startCursor, parseCell(bg3.x) + cellPos.right.x, parseCell(bg3.y) + cellPos.right.y);
+		}else if(state.left){
+			SCROLL.sprite.drawSpriteChunk(this.sprites.select_startCursor, parseCell(bg3.x) + cellPos.left.x, parseCell(bg3.y) + cellPos.left.y);
+		}
 		SCROLL.sprite.drawSpriteChunk(this.sprites.cursor, parseCell(bg3.x + tpos.x), parseCell(bg3.y + tpos.y));
 	},
 	
 	drawCanvasCursor: function(){
 		var tpos = this.cpControll.getMovePos()
-			, cv1 = SCROLL.bg1.canvas
-			, cv3 = SCROLL.bg3.canvas
-			, r = MR(0, 0, cv1.width, cv1.height)
-			, bgr = MR(SCROLL.bg3.x, 0, cv3.width, cv3.height)
+		, spos = this.cpControll.getStartPos('right')
+		, state = this.cpControll.getState('right') | this.cpControll.getState('left')
+		, cv1 = SCROLL.bg1.canvas
+		, cv3 = SCROLL.bg3.canvas
+		, r = MR(0, 0, cv1.width, cv1.height)
+		, bgr = MR(SCROLL.bg3.x, 0, cv3.width, cv3.height)
 		;
 		if(this.appClock % 2 == 0){
 			return;
@@ -2280,7 +2071,9 @@ SpriteQueryBuilder.prototype = {
 		}
 		
 		this.outputCellpos(tocellh(tpos.x), tocellh(tpos.y));
-		
+		if(state){
+			SCROLL.sprite.drawSpriteChunk(this.sprites.select_startCursor, parseCell(spos.x), parseCell(spos.y));
+		}
 		SCROLL.sprite.drawSpriteChunk(this.sprites.cursor, parseCell(tpos.x), parseCell(tpos.y));
 	},
 	
