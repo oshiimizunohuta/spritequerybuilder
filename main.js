@@ -1531,8 +1531,8 @@ SpriteQueryBuilder.prototype = {
 					//TODO x=0から大きな塊をつくってやりなおし
 					//TODO 同じy位置のものは取っ払って入れ替え
 					if(diff.diff_h > 0){
-						cx = x - (current().rect.w * currentLength());
-						recursiveRect = MR(cx, y, x - cx, q.rect.h);
+//						cx = x - (current().rect.w * currentLength());
+						recursiveRect = MR(rect.x, y, x - rect.x, q.rect.h);
 						//段の最初から直後までを再構築
 						recursiveResult = recursive(recursiveRect, current());
 //						if(recursiveResult.chunked === null){
@@ -1632,7 +1632,8 @@ SpriteQueryBuilder.prototype = {
 					
 					//クエリが走査範囲からはみ出ている
 					if(rect.ey < y + q.rect.h){
-						recursiveRect = MR([rect.x, rect.y, x + q.rect.w - 1, y + q.rect.h - 1].join(' ') + ' :pos');
+//						recursiveRect = MR([rect.x, rect.y, x + q.rect.w - 1, y + q.rect.h - 1].join(' ') + ' :pos');
+						recursiveRect = MR(rect.x, rect.y, rect.w, y + q.rect.h - rect.y - 1);
 						rect = recursiveRect;
 //						continue;
 //						recursiveRect = MR([rect.x, rect.y, x + q.rect.w - 1, y + q.rect.h - 1].join(' ') + ' :pos');
