@@ -1425,12 +1425,11 @@ SpriteQueryBuilder.prototype = {
 		, recursive = function(rect, preQInfo){
 			var x, y, cx
 			, chunked = [] //組み合わせ結果
-			, refresh = false
 			, cunkedRect = [] //組み込まれたRectの記録
 			, pos ,q
 			, chunkedCount = 0
 			, currentStack = []
-			, diff, recursiveResult, recursiveRect
+			, recursiveRect
 			, diffQueryInfo = function(b){
 				   var result = {}, a = current();
 				   result.queryEqual = a.query == b.query;
@@ -1461,7 +1460,7 @@ SpriteQueryBuilder.prototype = {
 					   a = a != null ? a : [];
 					   return a.join(SPQ_DELIMITER);
 				   });
-				   return chunked.join(SPQ_NEWLINE).replace(reg, SPQ_BOTTOMLINE);
+				   return chunked.join(SPQ_NEWLINE).replace(reg, SPQ_BOTTOMLINE).trim(SPQ_NEWLINE);
 			   }
 			   , stackCurrent = function(qinfo){
 				   currentStack.push(qinfo);
@@ -1479,44 +1478,30 @@ SpriteQueryBuilder.prototype = {
 				   var len = currentStack.length;
 				   return len > 0 ? currentStack[currentStack.length - 1] : self.makeCanvasQueryInfo('', MR(-1, -1, 1, 1))
 			   }
-			   , resultToQinfo = function(result, x, y){
-				return self.makeCanvasQueryInfo('(' + result.chunked + ')', result.rect);
-			   }
-			   , getIdQueries = function(x, y){
-				   var pos = x + (y * base.w)
-					   , c = self.canvasPuts[pos]
-					   , d = self.canvasDirections[pos];
-
-				   ;
-				   return self.makeCanvasQueryInfo(c + d, MR(x, y, 1, 1));
-			   }
+//			   , resultToQinfo = function(result, x, y){
+//				return self.makeCanvasQueryInfo('(' + result.chunked + ')', result.rect);
+//			   }
 			   , getQueries = function(x, y){
 				   var pos = x + (y * base.w)
 					   , q = self.canvasQueries[pos]
 					   , c = self.canvasPuts[pos]
-					   , d = self.canvasDirections[pos];
+					   , d = self.canvasDirections[pos]
+					   , qempty = self.isEmptyCanvasQueryInfo(q)
+					   ;
 
 				   c = c < 0 ? self.bgPaletteId : c;
-				   if(isDisassemble(q) || self.isEmptyCanvasQueryInfo(q)){
+				   if(!qempty && (q.rect.x != x || q.rect.y != y)){
+					   //位置が違う
+					   disassemblies.push(q.rect);
+				   }
+				   if(qempty || isDisassemble(q)){
 					   return self.makeCanvasQueryInfo(c + d, MR(x, y, 1, 1));
 				   }
 				   return self.makeCanvasQueryInfo(q.query + d, q.rect);
 			   }
-			   , rechunkInRect = function(rerect){
-				   var result
-				   ;
-					clearChunkedQinfo(rerect.y);
-					result = recursive(rerect, current());
-					if(result.chunked == null){
-						result = rechunkInRect(MR(result.rect.toString));
-					}
-					q = resultToQinfo(result);
-					setCurrent(q);
-					return q;
-			   }
 			   , arrangeVertical = function(q, rect, x, y){
 					//スタートするxを返す
-					var diff ,cx, recursiveRect, recursiveResult
+					var diff, recursiveRect, recursiveResult
 					;
    					//前回のと比較する
 					diff = diffQueryInfo(q);
@@ -1535,16 +1520,8 @@ SpriteQueryBuilder.prototype = {
 						recursiveRect = MR(rect.x, y, x - rect.x, q.rect.h);
 						//段の最初から直後までを再構築
 						recursiveResult = recursive(recursiveRect, current());
-//						if(recursiveResult.chunked === null){
-//							rechunkInRect(MR([rect.x, rect.y, recursiveResult.rect.ex - 1, recursiveResult.rect.ey - 1].join(' ') + ' :pos'));
-//							return rect.x;
-//						}
-//						arrangeVertical(q, rect, x, y);
+						clearChunkedQinfo(y - rect.y);
 						setCurrent(self.makeCanvasQueryInfo('(' + recursiveResult.chunked + ')', recursiveResult.rect));
-//						q = self.makeCanvasQueryInfo('(' + recursiveResult.chunked + ')', recursiveResult.rect);
-//						setCurrent(q);
-//						stackCurrent(self.makeCanvasQueryInfo('(' + recursiveResult.chunked + ')', recursiveResult.rect));
-//						rect.reculc(null, null, null, recursiveResult.rect.h);
 						return arrangeVertical(q, rect, x, y);
 
 					}
@@ -1553,13 +1530,8 @@ SpriteQueryBuilder.prototype = {
 						recursiveRect = MR(x, y, rect.ex - x, current().rect.h);
 						//段の最初から直前までを再構築
 						recursiveResult = recursive(recursiveRect, current());
-//						if(recursiveResult.chunked === null){
-//							rechunkInRect(MR([rect.x, rect.y, x - 1, recursiveResult.rect.ey - 1].join(' ') + ' :pos'));
-//							return rect.x;
-//						}
 						q = self.makeCanvasQueryInfo('(' + recursiveResult.chunked + ')', recursiveResult.rect);
 //						q = self.makeCanvasQueryInfo(recursiveResult.chunked, recursiveResult.rect);
-//						rect.reculc(null, null, null, q.rect.h);
 						return arrangeVertical(q, rect, x, y);
 					}
 					
@@ -1601,7 +1573,7 @@ SpriteQueryBuilder.prototype = {
 						   if(count > 0){
 							   qstr = preQuery.join(SPQ_DELIMITER);
 							   qstr = preQuery.length > 1 ? '(' + qstr + ')' : qstr;
-							   preQuery = [qstr + '^' + (count + 1) + '!'];
+							   preQuery = [qstr + '^' + (count + 1)];
 							   count = 0;
 						   }
 						   if(preQuery != null){
@@ -1630,16 +1602,17 @@ SpriteQueryBuilder.prototype = {
 						q = self.makeCanvasQueryInfo(self.bgPaletteId, MR(x, y, 1, 1));
 					}
 					
-					//クエリが走査範囲からはみ出ている
+					//クエリが走査範囲からはみ出ている（縦）
 					if(rect.ey < y + q.rect.h){
-//						recursiveRect = MR([rect.x, rect.y, x + q.rect.w - 1, y + q.rect.h - 1].join(' ') + ' :pos');
 						recursiveRect = MR(rect.x, rect.y, rect.w, y + q.rect.h - rect.y - 1);
 						rect = recursiveRect;
-//						continue;
-//						recursiveRect = MR([rect.x, rect.y, x + q.rect.w - 1, y + q.rect.h - 1].join(' ') + ' :pos');
-//						return {chunked: null, rect: recursiveRect};
 					}
-
+					//クエリが走査範囲からはみ出ている（横）disassembliesで対応
+//					if(rect.ex < x + q.rect.w){
+//						recursiveRect = MR(rect.x, rect.y, x + q.rect.w - rect.w - 1, rect.h);
+//						rect = recursiveRect;
+//					}
+					
 					//前回がからっぽならそのまま
 					if(currentLength() == 0){
 						stackCurrent(q);
