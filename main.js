@@ -1,7 +1,8 @@
 /**
- * Properties
- * Since 2013-11-19 07:43:37
+ * @name chunkit sprite query builder
+ * @since 2016-03-30 12:33:12
  * @author bitchunk
+ * @version 0.1.0
  */
 
 //canvas
@@ -163,7 +164,8 @@ SpriteQueryBuilder.prototype = {
 		});
 		
 		textAreaOnChangeHangle(function(e){
-			self.importQuery(e.target.value);
+			e.target.style.color = makeRGBA(COLOR_RED);
+//			self.importQuery(e.target.value);
 		});
 		
 		SCROLL = getScrolls();
@@ -450,7 +452,8 @@ SpriteQueryBuilder.prototype = {
 				self.drawDirectionButtons();
 				self.makeSelectByCanvas(sel.start.x, sel.start.y, sel.end.x, sel.end.y);
 				self.drawSelectedSprite();
-				self.events.preRefreshCanvasPos = {x: -1, y: -1};
+				self.resetRefreshCanvasPos();
+//				self.events.preRefreshCanvasPos = {x: -1, y: -1};
 			}
 			, 'dropper', 'right'
 		);
@@ -705,11 +708,14 @@ SpriteQueryBuilder.prototype = {
 				id = x + (y * tocellh(pw));
 				selected[j][i] = id;
 				selInfo.cellsDir[j][i] = dstr;
-				this.setSelected(makeSprite(img.name, id), dir, i, j)
+				this.setSelected(makeSprite(img.name, id), dir, i, j);
 				i++;
 			}
 			j++;
 		}
+		//重複書き込み防止をリセット
+		this.resetRefreshCanvasPos();
+		
 		//TODO 実装するdirectionSortSprites
 		selInfo.cells = this.directionSortSprites(selected, dir);
 		this.cellrects.paletteSelected = sr;
@@ -721,7 +727,8 @@ SpriteQueryBuilder.prototype = {
 //		q = sr.w + sr.h == 2 ? (sr.x + (sr.y * this.loadedSprite.cellrect.w)) + dstr :  '' + sr.x + '+' + sr.w + ':' + sr.y + '+' + sr.h + dstr;
 		q = sr.w + sr.h == 2 ? (sr.x + (sr.y * this.loadedSprite.cellrect.w)):  '' + sr.x + '+' + sr.w + ':' + sr.y + '+' + sr.h;
 		selInfo.queries = MR(selInfo.cells).convertArray(q);
-		selInfo.rect = sr;
+		selInfo.rect = queryToRect(q + dstr);
+//		selInfo.rect = sr;
 		
 		// TODO |rx|fhfv
 		selInfo.sprites = this.directionSortSprites(selInfo.sprites, dir);
@@ -732,8 +739,7 @@ SpriteQueryBuilder.prototype = {
 		comp[q] = q in comp ? comp[q] : {rect: sr, sprites: this.convertCanvasPuts(selInfo.sprites), query: q};
 		this.sortedQueries = this.sortQueries(comp);
 
-		//重複書き込み防止をリセット
-		this.events.preRefreshCanvasPos = {x: -1, y: -1};
+//		this.events.preRefreshCanvasPos = {x: -1, y: -1};
 
 	},
 	
@@ -792,7 +798,6 @@ SpriteQueryBuilder.prototype = {
 				calced = this.calcDirection(dstr, dir, 'object');
 				
 				this.setSelected(spr, calced, i, j);
-				// console.log(spr, dir, dstr, calced);
 				q[j].push(id + calced.dstr);
 				i++;
 			}
@@ -801,6 +806,9 @@ SpriteQueryBuilder.prototype = {
 		}
 		q = q.join(';');
 		
+		//重複書き込み防止をリセット
+		this.resetRefreshCanvasPos();
+		
 		selInfo.cells = this.directionSortSprites(selected, dir);
 		this.cellrects.paletteSelected = sr;
 
@@ -808,15 +816,10 @@ SpriteQueryBuilder.prototype = {
 		
 		selInfo.rect = sr;
 
-		// TODO  this.canvasQueries[sx][sy] = this.selectedQuery;
-
 		selInfo.sprites = this.directionSortSprites(selInfo.sprites, dir);
 		
 		dstr = directionToDstr(dir);
 		this.spritesEraser = makeSpriteQuery(this.uiSpriteName, '63*' + selInfo.cells[0].length + '^' + selInfo.cells.length);
-		
-		//重複書き込み防止をリセット
-		this.events.preRefreshCanvasPos = {x: -1, y: -1};
 		
 	},
 	
@@ -946,7 +949,7 @@ SpriteQueryBuilder.prototype = {
 					this.canvasDirections[putpos] = selInfo.cellsDir[j][i];
 					
 					//クエリの重なりを削除する判定
-					if(fixQInfo(fixed, this.makeCanvasQueryInfo(selInfo.queries[j][i], queryToRect(selInfo.queries[j][i]).reculc(i, j)))){
+					if(fixQInfo(fixed, this.makeCanvasQueryInfo(selInfo.queries[j][i], queryToRect(selInfo.queries[j][i] + selInfo.cellsDir[j][i]).reculc(i, j)))){
 						this.putCanvasQuery(fixed[j][i].rect.reculc(cpos.x + i, cpos.y + j), fixed[j][i].query);
 					}
 				}
@@ -956,7 +959,6 @@ SpriteQueryBuilder.prototype = {
 		catch(e){
 			console.error(e)
 		}
-		// console.log(this.canvasQueries, selInfo)
 	},
 	
 	isEmptyCanvasQueryInfo: function(qinfo)
@@ -1004,7 +1006,7 @@ SpriteQueryBuilder.prototype = {
 					this.clearCanvasQueries(q.rect);
 				}
 				this.canvasQueries[pos] = this.makeCanvasQueryInfo(query, rect);
-//		console.log(query, rect);
+
 			}
 		}
 	},
@@ -1020,13 +1022,13 @@ SpriteQueryBuilder.prototype = {
 		if(text == ""){
 			return;
 		}
-		// console.log(text)
+
 		try{
 			sprite = makeSpriteQuery(this.loadedSprite.image.name, text);
-			console.log(sprite);
+		
 			qchunk = outputLowChunkQuery(sprite);
 			qchunk = qchunk.split(' ');
-			console.log(qchunk);
+
 			for(j = 0; j < qchunk.length; j++){
 				mc = qchunk[j].match(reg);
 				rect = queryToRect(mc[4], this.loadedSprite.cellrect);
@@ -1056,7 +1058,7 @@ SpriteQueryBuilder.prototype = {
 	 */
 	calcDirection: function(src, dst, type)
 	{
-		// console.log(a, b)
+
 		var dir = {rot: 0, flip_v: 0, flip_h: 0, dstr: ''}
 		;
 		src = typeof src == 'string' ? dstrToDirection(src) : src;
@@ -1179,149 +1181,24 @@ SpriteQueryBuilder.prototype = {
 		return new Int16Array(ranged);
 	},
 	
-	convertCanvasPuts: function(sprChunk){
+	convertCanvasPuts: function (sprChunk) {
 		var i, j, conv = [], w, h, spr, ids;
-		if(sprChunk.length != null){
-			for(j = 0; j < sprChunk.length; j++){
-				for(i = 0; i < sprChunk[j].length; i++){
+		if (sprChunk.length != null) {
+			for (j = 0; j < sprChunk.length; j++) {
+				for (i = 0; i < sprChunk[j].length; i++) {
 					conv.push(sprChunk[j][i].id);
 				}
 			}
-		}else{
-			ids = sprChunk.chunkIds
-			for(j = 0; j < ids.length; j++){
-				for(i = 0; i < ids[j].length; i++){
+		} else {
+			ids = sprChunk.chunkIds;
+			for (j = 0; j < ids.length; j++) {
+				for (i = 0; i < ids[j].length; i++) {
 					conv.push(ids[j][i]);
 				}
 			}
-			
+
 		}
 		return new Int16Array(conv);
-	},
-	
-	scanHeight: function(chunkQuery){
-		var match, h, m
-		;
-		match = exp.exec(chunk);
-		if(match == null){
-			return 1;
-		}
-		h = match[2] == null ? 1 : match[2];
-		m = match[4]== null ? 1 : match[4];
-		return h * m;
-	},
-	
-	alignChunks: function(sprites){
-		var i, j, k
-			, spritesG, spritesH, grouped
-			, chunked, chunks
-			, preHeight, height
-			, exp = /([:]\d+\+(\d+))?(\w|\d|[|*()])\^(\d)/
-			, scanLineHeight = function(line){
-				var topHeight = 0, x, match, h, m;
-				for(x in line){
-					match = exp.exec(line[x]);
-					h = match[2] == null ? 1 : match[2];
-					m = match[4]== null ? 1 : match[4];
-					topHeight = topHeight < (h * m) ? (h * m) : topHeight;
-				}
-				return topHeight;
-			}
-			, scanHeight = function(chunk){
-				var match, h, m
-				;
-				match = exp.exec(chunk);
-				if(match == null){
-					return 1;
-				}
-				h = match[2] == null ? 1 : match[2];
-				m = match[4]== null ? 1 : match[4];
-				return h * m;
-			}
-			, groupingL = function(spr, x, y, h){
-				var j, i, len, grouped
-				;
-				grouped = [];
-				for(j = y; j < h; j++){
-					if(spr[j] == null){
-						continue;
-					}
-					len = grouped.length;
-					grouped.push([]);
-					for(i = 0; i < x;  i++){
-						if(spr[j][i] == null){
-							continue;
-						}
-						grouped[len].push(spr[j][i]);
-						delete spr[j][i];
-					}
-					delete spr[j];
-				}
-				for(j = 0; j < grouped.length; j++){
-					grouped[j] = grouped[j].join(' ');
-				}
-				spr[y] = ['(' + grouped.join('!;') + ')'];
-				return spr;
-			}
-			, groupingR = function(spr, x, y, h){
-				var j, i, len, grouped
-				;
-				grouped = [];
-				for(j = y; j < h; j++){
-					if(spr[j] == null){
-						continue;
-					}
-					len = grouped.length;
-					grouped.push([]);
-					if(spr[j][i] == null){
-						continue;
-					}
-					grouped[len].push(spr[j][i]);
-					delete spr[j][i];
-					delete spr[j];
-				}
-				for(j = 0; j < grouped.length; j++){
-					grouped[j] = grouped[j].join(' ');
-				}
-				
-				spr[y] = grouped.length == 1 ? grouped[0] : ['(' + grouped.join('!;') + ')'];
-				return spr;
-			}
-		;
-		spritesG = {};
-		for(j in sprites){
-			spritesH = sprites[j];
-			// height = scanLineHeight(spritesV);
-			preHeight = null;
-			spritesG[j] = {}; 
-			for(i in spritesH){
-				height = scanHeight(spritesH[j]);
-				if(preHeight == null){
-					spritesG[j][i] = spritesH[i];
-				}else if(height > preHeight){
-					spritesG = groupingL(sprites, i, j, height);
-				}else if(height < preHeight){
-					spritesG = groupingR(sprites, i, j, height);
-				}else{
-					spritesG[j][i] = spritesH[i];
-				}
-				preHeihgt = height;
-			}
-			// q += spritesG.join(' ') + ';';
-		}
-		
-		chunked = [];
-		// console.log(spritesG);
-		for(j in spritesG){
-			chunks = [];
-			for(i in spritesG[j]){
-				chunks.push(spritesG[j][i]);
-			}
-			chunked.push(chunks);
-		}
-		// console.log(chunked);
-		
-		return chunked;
 	},
 	
 	
@@ -1381,12 +1258,12 @@ SpriteQueryBuilder.prototype = {
 					if(find == null || overlap(finded, find)){
 						continue;
 					}
-					// console.log(find, x, y);
+
 					//検出済みに追加
 					finded[q].push(find);
 					if(this.debugCount == pcnt){
 						this.cellrects.selectChunk = find;
-						// console.log(find)
+
 						this.debugCursorPos.x = x;
 						this.debugCursorPos.y = y;
 					}
@@ -1396,7 +1273,7 @@ SpriteQueryBuilder.prototype = {
 		}
 		for(q in finded){
 			if(finded[q].length == 0){
-				console.log('del ' + q);
+
 				delete comp[q];
 				delete finded[q];
 			}
@@ -1415,12 +1292,11 @@ SpriteQueryBuilder.prototype = {
 	 */
 	collectQueryInfoPair: function(rect, preQInfo)
 	{
-		var 
-		disassemblies = [] //分解することになったRect達
-		, self = this
-		, base = this.cellrects.base
-		, erect = this.enebleRect()
-		, queries = this.canvasQueries
+		var disassemblies = [] //分解することになったRect達
+			, self = this
+			, base = this.cellrects.base
+			, erect = this.enebleRect()
+			, queries = this.canvasQueries
 
 		, recursive = function(rect, preQInfo){
 			var x, y, cx
@@ -1431,172 +1307,276 @@ SpriteQueryBuilder.prototype = {
 			, currentStack = []
 			, recursiveRect
 			, diffQueryInfo = function(b){
-				   var result = {}, a = current();
-				   result.queryEqual = a.query == b.query;
-				   result.rectEqual = a.rect.isFit(b.rect);
-				   result.diff_w = b.rect.w - a.rect.w;
-				   result.diff_h = b.rect.h - a.rect.h;
+				var result = {}, a = current();
+				result.queryEqual = a.query == b.query;
+				result.rectEqual = a.rect.isFit(b.rect);
+				result.diff_w = b.rect.w - a.rect.w;
+				result.diff_h = b.rect.h - a.rect.h;
 
-				   return result;
-			   }
-			   , chunkQinfo = function(qinfo, cnt){
-				   var optstr = cnt > 1 ? '*' + (cnt) : '';
-				   chunked[chunkedCount].push(qinfo.query + optstr);
-				   cunkedRect.push(qinfo.rect);
-				   clearCurrent();
-			   }
-			   , clearChunkedQinfo = function(row){
-				   chunked[row] = [];
-			   }
-			   , isDisassemble = function(qinfo){
-				   return disassemblies.some(function(a){
-					   return a.isFit(qinfo.rect);
-				   });
-			   }
-			   , chunkJoin = function(chunked){
-				   var reg = new RegExp('' + SPQ_NEWLINE + '{2,}', 'g')
-					   ;
-				   chunked = chunked.map(function(a){
-					   a = a != null ? a : [];
-					   return a.join(SPQ_DELIMITER);
-				   });
-				   return chunked.join(SPQ_NEWLINE).replace(reg, SPQ_BOTTOMLINE).trim(SPQ_NEWLINE);
-			   }
-			   , stackCurrent = function(qinfo){
-				   currentStack.push(qinfo);
-			   }
-			   , currentLength = function(){
-				   return currentStack.length;
-			   }
-			   , clearCurrent = function(){
-				   return currentStack = [];
-			   }
-			   , setCurrent = function(q){
-				   return currentStack = [q];
-			   }
-			   , current = function(){
-				   var len = currentStack.length;
-				   return len > 0 ? currentStack[currentStack.length - 1] : self.makeCanvasQueryInfo('', MR(-1, -1, 1, 1))
-			   }
-//			   , resultToQinfo = function(result, x, y){
-//				return self.makeCanvasQueryInfo('(' + result.chunked + ')', result.rect);
-//			   }
-			   , getQueries = function(x, y){
-				   var pos = x + (y * base.w)
-					   , q = self.canvasQueries[pos]
-					   , c = self.canvasPuts[pos]
-					   , d = self.canvasDirections[pos]
-					   , qempty = self.isEmptyCanvasQueryInfo(q)
-					   ;
-
-				   c = c < 0 ? self.bgPaletteId : c;
-				   if(!qempty && (q.rect.x != x || q.rect.y != y)){
-					   //位置が違う
-					   disassemblies.push(q.rect);
-				   }
-				   if(qempty || isDisassemble(q)){
-					   return self.makeCanvasQueryInfo(c + d, MR(x, y, 1, 1));
-				   }
-				   return self.makeCanvasQueryInfo(q.query + d, q.rect);
-			   }
-			   , arrangeVertical = function(q, rect, x, y){
-					//スタートするxを返す
-					var diff, recursiveRect, recursiveResult
+				return result;
+			}
+			, chunkQinfo = function(qinfo, cnt){
+				var optstr = cnt > 1 ? SPQ_HMULTI + (cnt) : ''
+				 , reg = new RegExp('^([^(]*' + SPQ_NEWLINE + '.*[^)])$')
+				 , i
+				 , match = qinfo.query.match(reg)
+				;
+				if(match == null){
+					qinfo.query = qinfo.query.replace(reg, '($1)');
+				}else{
+					qinfo.query = qinfo.query.replace(reg, '($1)');
+				}
+				chunked[chunkedCount].push(qinfo.query + optstr);
+				//隙間を埋める
+				for(i = 1; i < qinfo.rect.h; i++){
+					chunked[chunkedCount + i] = [''];
+				}
+				cunkedRect.push(qinfo.rect);
+				clearCurrent();
+			}
+			, clearChunkedQinfo = function(row){
+				chunked[row] = [];
+			}
+			, isDisassemble = function(qinfo){
+				return disassemblies.some(function(a){
+					return a.isFit(qinfo.rect);
+				});
+			}
+			, chunkJoin = function(chunked){
+				var reg = new RegExp('' + SPQ_NEWLINE + '{2,}', 'g')
+				, regBottom = SPQREG_INPAT
+				, newLineReg = new RegExp(SPQ_FORCE + '?' + SPQ_NEWLINE + '$')
+				, q, c
 					;
-   					//前回のと比較する
-					diff = diffQueryInfo(q);
+				chunked = chunked.map(function(a){
+					a = a != null ? a : [];
+					return a.join(SPQ_DELIMITER);
+				});
+				q = chunked.join(SPQ_NEWLINE).replace(reg, SPQ_BOTTOMLINE).replace(newLineReg, '').trim();
+				c = q;
+				while(c.match(regBottom) != null){
+					c = c.replace(regBottom, "");
+				}
+				q = c.indexOf(SPQ_BOTTOMLINE) >= 0 ? '(' + q + ')' : q;
+				
+				return q;
+			}
+			, stackCurrent = function(qinfo){
+				currentStack.push(qinfo);
+			}
+			, currentLength = function(){
+				return currentStack.length;
+			}
+			, clearCurrent = function(){
+				return currentStack = [];
+			}
+			, setCurrent = function(q){
+				return currentStack = [q];
+			}
+			, current = function(){
+				var len = currentStack.length;
+				return len > 0 ? currentStack[currentStack.length - 1] : self.makeCanvasQueryInfo('', MR(-1, -1, 1, 1))
+			}
+			, getQueries = function(x, y){
+				var pos = x + (y * base.w)
+					, q = self.canvasQueries[pos]
+					, c = self.canvasPuts[pos]
+					, d = self.canvasDirections[pos]
+					, qempty = self.isEmptyCanvasQueryInfo(q)
+					;
 
-					//クエリが同じ
-					if(diff.queryEqual){
-						stackCurrent(q);
-						return x;
-					}
-					
-					//大きい塊なら戻って合成
-					//TODO x=0から大きな塊をつくってやりなおし
-					//TODO 同じy位置のものは取っ払って入れ替え
-					if(diff.diff_h > 0){
-//						cx = x - (current().rect.w * currentLength());
-						recursiveRect = MR(rect.x, y, x - rect.x, q.rect.h);
-						//段の最初から直後までを再構築
-						recursiveResult = recursive(recursiveRect, current());
-						clearChunkedQinfo(y - rect.y);
-						setCurrent(self.makeCanvasQueryInfo('(' + recursiveResult.chunked + ')', recursiveResult.rect));
-						return arrangeVertical(q, rect, x, y);
+				c = c < 0 ? self.bgPaletteId : c;
+				if(!qempty && (q.rect.x != x || q.rect.y != y)){
+					//位置が違う
+					disassemblies.push(q.rect);
+				}
+				if(qempty || isDisassemble(q)){
+					return self.makeCanvasQueryInfo(c + d, MR(x, y, 1, 1));
+				}
+				return self.makeCanvasQueryInfo(q.query + d, q.rect);
+			}
+			, arrangeVertical = function(q, rect, x, y){
+				 //スタートするxを返す
+				 var diff, recursiveRect, recursiveResult
+				 ;
+				 //前回のと比較する
+				 diff = diffQueryInfo(q);
 
-					}
-					//小さい塊ならその後を合成
-					else if(diff.diff_h < 0){
-						recursiveRect = MR(x, y, rect.ex - x, current().rect.h);
-						//段の最初から直前までを再構築
-						recursiveResult = recursive(recursiveRect, current());
-						q = self.makeCanvasQueryInfo('(' + recursiveResult.chunked + ')', recursiveResult.rect);
-//						q = self.makeCanvasQueryInfo(recursiveResult.chunked, recursiveResult.rect);
-						return arrangeVertical(q, rect, x, y);
-					}
-					
-					chunkQinfo(current(), currentLength());
-					stackCurrent(q);
-					q = null;
-					
-					return -1;
-			   }
-			   , compressV = function(chunked){
-				   var count = 0, preQuery = '', current, i, j, reschunk = [], qstr
-					   , joinRowLen = 1
-					   , searchLen, sourceLen
-					   , skiped = false
-				   ;
-					   //結合する行を決める(初期は半分以下)
-					   sourceLen = chunked.length;
+				 //クエリが同じ
+				 if(diff.queryEqual){
+					 stackCurrent(q);
+					 return x;
+				 }
 
-					   for(j = 0; j < sourceLen; j++){
-						   preQuery = chunked.shift();
-						   if(preQuery == null){
-							   skiped = true;
-							   continue;
-						   }
-						   searchLen = chunked.length;
-						   for(i = 0; i < searchLen; i++){
-							   current = chunked.shift();
-							   if(current == null){
-								   skiped = true;
-								   continue;
-							   }
-							   if(preQuery.join(SPQ_DELIMITER) == current.join(SPQ_DELIMITER)){
-								   count++;
-							   }else{
-								   chunked.unshift(current);
-								   break;
-							   }
-						   }
-						   if(count > 0){
-							   qstr = preQuery.join(SPQ_DELIMITER);
-							   qstr = preQuery.length > 1 ? '(' + qstr + ')' : qstr;
-							   preQuery = [qstr + '^' + (count + 1)];
-							   count = 0;
-						   }
-						   if(preQuery != null){
-							   reschunk.push(preQuery);
-						   }
-						   if(skiped){
-							   reschunk.push([""]);
-							   skiped = false;
-						   }
-					   }
-				   return reschunk;
-			   }
+				 //大きい塊なら戻って合成
+				 if(diff.diff_h > 0){
+					 recursiveRect = MR(rect.x, y, x - rect.x, q.rect.h);
+					 //段の最初から直後までを再構築
+					 recursiveResult = recursive(recursiveRect, current());
+					 clearChunkedQinfo(y - rect.y);
+					 setCurrent(self.makeCanvasQueryInfo(recursiveResult.chunked, recursiveResult.rect));
+					 return arrangeVertical(q, rect, x, y);
+
+				 }
+				 //小さい塊ならその後を合成
+				 else if(diff.diff_h < 0){
+					 recursiveRect = MR(x, y, rect.ex - x, current().rect.h);
+					 //段の最初から直前までを再構築
+					 recursiveResult = recursive(recursiveRect, current());
+					 q = self.makeCanvasQueryInfo(recursiveResult.chunked, recursiveResult.rect);
+					 return arrangeVertical(q, rect, x, y);
+				 }
+
+				 chunkQinfo(current(), currentLength());
+				 stackCurrent(q);
+				 q = null;
+
+				 return -1;
+			}
+			, compressVJ = function(chunked){
+				var count = 0, preQuery = '', current, i, j, qstr
+					, sourceLen, sliceLen
+					, rangeChunkJoin = function(ck, rows, start){
+						return chunkJoin(ck.slice(start, start + rows));
+					}
+				;
+				//結合する行を決める(初期は半分以下)
+				sliceLen = (chunked.length / 2) | 0;
+				sourceLen = chunked.length;
+				sliceLen = 0;
+				while(sliceLen++ < (chunked.length / 2) | 0){
+					for(j = 0; j < sourceLen; j += 1){
+						if(sliceLen == 0){break;}
+						preQuery = rangeChunkJoin(chunked, sliceLen, j);
+						if(preQuery == null){
+							continue;
+						}
+						for(i = j + sliceLen; i < sourceLen; i += sliceLen){
+							current  = rangeChunkJoin(chunked, sliceLen, i);
+							if(current == null || current == ''){
+								break;
+							}
+							if(preQuery == current){
+								count++;
+							}else{
+								break;
+							}
+						}
+						if(count > 0){
+							qstr = preQuery;
+							qstr = preQuery.length > 1 ? '(' + qstr + ')' : qstr;
+							qstr += SPQ_VMULTI + (count + 1) + SPQ_NEWLINE;
+							preQuery = [qstr];
+							
+							if(preQuery != null){
+								//配列の入れ替え、走査数再計算
+								chunked.splice(j, sliceLen * (count + 1), [preQuery]);
+								sliceLen = 0;
+								sourceLen = chunked.length;
+								count = 0;
+								// 最初の段からやりなおし
+								break;
+							}
+						}
+					}
+				}
+				return chunked;
+			}
+			, compressHJ = function(chunked){
+				var count = 0, preQuery = '', current, i, j, qstr
+					, sourceLen, sliceLen, chunk, c
+					, rangeChunkJoin = function(ck, rows, start){
+						var reg = SPQREG_INPAT, c, r = [];
+						//全体を連結
+						c = ck.join(SPQ_DELIMITER);
+
+						//最短()がなくなるまで[Rn]で置換
+						while(c.match(reg) != null){
+							r.push(c.match(reg)[0]);
+							c = c.replace(reg, '[R' + (r.length - 1) + ']');
+						}
+						
+						//再び展開
+						c = c.split(SPQ_DELIMITER);
+						
+						//展開後の置換もどし
+						while(r.join('').length > 0){
+							r.forEach(function(a, i){
+								c = c.map(function(b){
+									if(b.indexOf('[R' + i + ']') >= 0){
+										b= b.replace('[R' + i + ']', a);
+										delete r[i];
+									}
+									return b;
+								});
+							});
+						}
+						
+						return c.slice(start);
+//						return c.slice(start, start + rows).join(SPQ_DELIMITER);
+//						return ck.slice(start, start + rows).join(SPQ_DELIMITER);
+					}
+				;
+				for(c = 0; c < chunked.length; c++){
+					//結合する行を決める(初期は半分以下)
+					chunk = chunked[c];
+					chunk = rangeChunkJoin(chunk);
+					sliceLen = (chunk.length / 2) | 0;
+					sourceLen = chunk.length;
+					sliceLen = 0;
+					while(sliceLen++ < (chunk.length / 2) | 0){
+						for(j = 0; j < sourceLen; j += 1){
+							if(sliceLen == 0){break;}
+//							preQuery = rangeChunkJoin(chunk, sliceLen, j);
+							preQuery = chunk.slice(j, j + sliceLen).join(SPQ_DELIMITER);
+							if(preQuery == null){
+								continue;
+							}
+							for(i = j + sliceLen; i < sourceLen; i += sliceLen){
+//								current = rangeChunkJoin(chunk, sliceLen, i);
+								current = chunk.slice(i, i + sliceLen).join(SPQ_DELIMITER);
+								if(current == null || current == ''){
+									break;
+								}
+								if(preQuery == current){
+									count++;
+								}else{
+									break;
+								}
+							}
+							if(count > 0){
+								qstr = preQuery;
+								qstr = preQuery.length > 1 ? '(' + qstr + ')' : qstr;
+								qstr += SPQ_HMULTI + (count + 1) + SPQ_NEWLINE;
+								preQuery = [qstr];
+
+								if(preQuery != null){
+									//配列の入れ替え、走査数再計算
+									chunk.splice(j, sliceLen * (count + 1), [preQuery]);
+									sliceLen = 0;
+									sourceLen = chunk.length;
+									count = 0;
+									chunked[c] = chunk;
+									// 最初の段からやりなおし
+									break;
+								}
+							}
+						}
+					}
+				}
+				return chunked;
+			}
 			;
 			rect = rect == null ? erect : MR(rect.convertString());
 
 			for(y = rect.y; y < rect.ey; y += current().rect.h){
 				chunked[chunkedCount] = [];
 				clearCurrent();//
-				debugger
+				
 				for(x = rect.x; x < rect.ex; x += current().rect.w){
 					//クエリ情報の取得
 					q = getQueries(x, y);
-	//					debugger
+	//					
 					//からっぽクエリは背景IDとする
 					if(self.isEmptyCanvasQueryInfo(q)){
 						q = self.makeCanvasQueryInfo(self.bgPaletteId, MR(x, y, 1, 1));
@@ -1607,11 +1587,7 @@ SpriteQueryBuilder.prototype = {
 						recursiveRect = MR(rect.x, rect.y, rect.w, y + q.rect.h - rect.y - 1);
 						rect = recursiveRect;
 					}
-					//クエリが走査範囲からはみ出ている（横）disassembliesで対応
-//					if(rect.ex < x + q.rect.w){
-//						recursiveRect = MR(rect.x, rect.y, x + q.rect.w - rect.w - 1, rect.h);
-//						rect = recursiveRect;
-//					}
+					//クエリが走査範囲からはみ出ている（横）はdisassembliesで対応
 					
 					//前回がからっぽならそのまま
 					if(currentLength() == 0){
@@ -1632,7 +1608,8 @@ SpriteQueryBuilder.prototype = {
 				}
 				chunkedCount += current().rect.h;
 			}
-			chunked = compressV(chunked);
+			chunked = compressHJ(chunked);
+			chunked = compressVJ(chunked);
 
 			return {chunked: chunkJoin(chunked), rect: MR([rect.x, rect.y, x - 1, y - 1].join(' ') + ' :pos')};				
 		}
@@ -1644,13 +1621,18 @@ SpriteQueryBuilder.prototype = {
 	/**
 	 * イベントをAppで処理
 	 */
-	eventsProcess: function(){
+	eventsProcess: function () {
 		this.eventOutputQuery();
 
 	},
 	
+	resetRefreshCanvasPos: function(){
+		this.events.preRefreshCanvasPos = {x: -1, y: -1};
+		this.events.asSetRefreshCanvasPos = {x: -1, y: -1};
+	},
+	
 	eventOutputQuery: function(){
-	var pre = this.events.preRefreshCanvasPos
+		var pre = this.events.preRefreshCanvasPos
 			, x = tocellh(pre.x)
 			, y = tocellh(pre.y)
 			, asset = this.events.asSetRefreshCanvasPos
@@ -1665,12 +1647,8 @@ SpriteQueryBuilder.prototype = {
 			return;
 		}
 		this.putSpritePalette(pre.x, pre.y);
-		// TODO canvasQueryInfoからペアを探す
-		// finded = this.scanPaletteChunks();
-		// paired = this.scanCanvasPair(finded);
-		
+		// canvasQueryInfoからペアを探す
 		paired = this.collectQueryInfoPair();
-		// this.scanCanvasChunks(finded);
 		if(this.debugCanvasInfo == 1){
 			this.drawDirectionCanvas(pre.x, pre.y);
 		}else if(this.debugCanvasInfo == 2){
@@ -1680,7 +1658,6 @@ SpriteQueryBuilder.prototype = {
 		}
 		refreshTextArea(paired.chunked)
 		
-		// aligned = this.alignChunks(paired);
 		// this.outputSpriteQueryBatch(aligned);
 		
 		asset.x = x;
@@ -1884,7 +1861,6 @@ SpriteQueryBuilder.prototype = {
 				colorCount = drawnQuery.length - 1;
 				// drawnQuery = [];
 			}
-			console.log(crect, colorCount);
 		}
 		crect = crect == null ? MR(0, 0, bw, bh) : crect
 		w = crect.w;
@@ -1966,7 +1942,6 @@ SpriteQueryBuilder.prototype = {
 		}
 		
 	},
-			
 	//Repeat Draw
 	
 	outputSpriteQueryBatch: function(source){
@@ -1984,7 +1959,6 @@ SpriteQueryBuilder.prototype = {
 			sprites = source;
 			sprites = Object.keys(sprites).map(function(a, i){
 				return Object.keys(sprites[a]).map(function(b, i){
-					// console.log(sprites[a][b].replace(/\-1/g, bgid));
 					return sprites[a][b].replace(/\-1/g, bgid);
 				});
 			});
@@ -2002,8 +1976,9 @@ SpriteQueryBuilder.prototype = {
 
 	drawPaletteCursor: function(){
 		var tpos = this.ppControll.getMovePos()
-		, rpos = this.cpControll.getStartPos('right')
-		, lpos = this.cpControll.getStartPos('left')
+		, ppos = this.ppControll.getStartPos()
+		, rpos = this.ppControll.getStartPos('right')
+		, lpos = this.ppControll.getStartPos('left')
 		, state = {right: this.cpControll.getState('right') , left: this.cpControll.getState('left')}
 		, bg3 = SCROLL.bg3
 		, cellPos = {
@@ -2015,28 +1990,35 @@ SpriteQueryBuilder.prototype = {
 		if(this.appClock % 2 == 0){
 			return;
 		}
-		if(r.isContain(tpos.x, tpos.y) == false){
-			return;
+		if(r.isContain(tpos.x, tpos.y)){
+			this.outputCellpos(tocellh(tpos.x - r.x), tocellh(tpos.y - r.y));
+			SCROLL.sprite.drawSpriteChunk(this.sprites.cursor, parseCell(bg3.x + tpos.x), parseCell(bg3.y + tpos.y));
 		}
-		this.outputCellpos(tocellh(tpos.x - r.x), tocellh(tpos.y - r.y));
+		if(ppos.x > 0){
+			if(state.right){
+				SCROLL.sprite.drawSpriteChunk(this.sprites.select_startCursor, bg3.x + cellPos.right.x, bg3.y + cellPos.right.y);
+			}else if(state.left){
+				SCROLL.sprite.drawSpriteChunk(this.sprites.select_startCursor, bg3.x + cellPos.left.x, bg3.y + cellPos.left.y);
+			}
+		}
 		
-		if(state.right){
-			SCROLL.sprite.drawSpriteChunk(this.sprites.select_startCursor, parseCell(bg3.x) + cellPos.right.x, parseCell(bg3.y) + cellPos.right.y);
-		}else if(state.left){
-			SCROLL.sprite.drawSpriteChunk(this.sprites.select_startCursor, parseCell(bg3.x) + cellPos.left.x, parseCell(bg3.y) + cellPos.left.y);
-		}
-		SCROLL.sprite.drawSpriteChunk(this.sprites.cursor, parseCell(bg3.x + tpos.x), parseCell(bg3.y + tpos.y));
+		
 	},
 	
 	drawCanvasCursor: function(){
 		var tpos = this.cpControll.getMovePos()
+		, ppos = this.ppControll.getStartPos()
 		, spos = this.cpControll.getStartPos('right')
-		, state = this.cpControll.getState('right') | this.cpControll.getState('left')
+		, state = {right: this.cpControll.getState('right') , left: this.cpControll.getState('left')}
 		, cv1 = SCROLL.bg1.canvas
 		, cv3 = SCROLL.bg3.canvas
 		, r = MR(0, 0, cv1.width, cv1.height)
 		, bgr = MR(SCROLL.bg3.x, 0, cv3.width, cv3.height)
 		;
+		
+		if(ppos.x >= 0){
+			return;
+		}
 		if(this.appClock % 2 == 0){
 			return;
 		}
@@ -2045,7 +2027,7 @@ SpriteQueryBuilder.prototype = {
 		}
 		
 		this.outputCellpos(tocellh(tpos.x), tocellh(tpos.y));
-		if(state){
+		if(state.right){
 			SCROLL.sprite.drawSpriteChunk(this.sprites.select_startCursor, parseCell(spos.x), parseCell(spos.y));
 		}
 		SCROLL.sprite.drawSpriteChunk(this.sprites.cursor, parseCell(tpos.x), parseCell(tpos.y));
@@ -2129,13 +2111,6 @@ SpriteQueryBuilder.prototype = {
 			, r = this.rects.selectPalette
 			, s = this.selectedInfo.sprites
 		;
-		// if(this.appClock % 10 > 0){
-			// return;
-		// }
-		// if(!r.isContain(pos.x, pos.y)){
-			// return;
-		// }
-		// scr.drawSpriteChunk(s, r.x, r.y);
 		
 	},
 	
@@ -2277,6 +2252,7 @@ function getBuildCellSize(){
 function refreshTextArea(t){
 	// document.getElementById('spritequery').innerText = t;
 	document.getElementById('spritequery').value = t;
+	document.getElementById('spritequery').style = makeRGBA(COLOR_BLACK);
 }
 
 function textAreaOnChangeHangle(func){
