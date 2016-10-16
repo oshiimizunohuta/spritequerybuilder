@@ -2,7 +2,7 @@
  * @name chunkit sprite query builder
  * @since 2016-03-30 12:33:12
  * @author bitchunk
- * @version 0.1.0
+ * @version 0.1.1
  */
 
 //canvas
@@ -154,9 +154,9 @@ SpriteQueryBuilder.prototype = {
  		//ウィンドウ　上：スプライトブラシ
 		makeScroll('bg3', false);
 		//選択中エフェクト
-		makeScroll('sprite', false);
-		makeScroll('tmp', false);
-		makeScroll('screen', true);
+		makeCanvasScroll('sprite');
+		makeCanvasScroll('tmp');
+		makeCanvasScroll('screen');
 		
 		imageDropFileHandle(scrollByName('screen').canvas, function(img){
 			self.openSpriteImage(img);
@@ -167,6 +167,7 @@ SpriteQueryBuilder.prototype = {
 			e.target.style.color = makeRGBA(COLOR_RED);
 //			self.importQuery(e.target.value);
 		});
+		focusTextArea();
 		
 		SCROLL = getScrolls();
 		bg = SCROLL.bg1.canvas;
@@ -1028,6 +1029,11 @@ SpriteQueryBuilder.prototype = {
 		
 			qchunk = outputLowChunkQuery(sprite);
 			qchunk = qchunk.split(' ');
+			
+			if(this.debugCanvasInfo == 3){
+				bg1.drawSprite(sprite, 0, 0);
+				return;
+			}
 
 			for(j = 0; j < qchunk.length; j++){
 				mc = qchunk[j].match(reg);
@@ -1042,7 +1048,7 @@ SpriteQueryBuilder.prototype = {
 					this.drawDirectionCanvas(x, y);
 				}else if(this.debugCanvasInfo == 2){
 					this.drawQueryInfoCanvas(x, y);
-				}else{
+				}else if(this.debugCanvasInfo == 0){
 					this.drawSpritesCanvas(x, y);
 				}
 			}
@@ -2176,14 +2182,16 @@ SpriteQueryBuilder.prototype = {
 		;
 		
 		if(state.ext && (trig['<'] || trig['>'])){
-			this.debugCanvasInfo = (this.debugCanvasInfo + 1) % 3;
+			this.debugCanvasInfo = (this.debugCanvasInfo + 1) % 4;
 			if(this.debugCanvasInfo == 1){
 				this.drawRefreshCanvasDirection();
 			}else if(this.debugCanvasInfo == 2){
 				this.drawRefreshCanvasQueryInfo();
+			}else if(this.debugCanvasInfo == 3){
+				SCROLL.bg1.clear(COLOR_BLACK);
+				this.importQuery(getTextArea());
 			}else{
 				this.drawRefreshCanvas();
-				
 			}
 		}
 		
@@ -2255,6 +2263,9 @@ function refreshTextArea(t){
 	document.getElementById('spritequery').style = makeRGBA(COLOR_BLACK);
 }
 
+function focusTextArea(){
+	document.getElementById('spritequery').focus();
+}
 function textAreaOnChangeHangle(func){
 	document.getElementById('spritequery').onchange = func;
 }
