@@ -76,6 +76,7 @@ SpriteQueryBuilder.prototype = {
 		this.boost = false;
 		this.loadedSprite;
 		this.spritesEraser;
+		this.loadedSpriteCursor = makeCursor('scope', 1, 1, 1);
 		this.canvasPuts; //sprites id put in Canvas Array
 		this.canvasDirections; //sprites direction put in Canvas Array
 		this.canvasQueries; //sprites Query put in Canvas Array
@@ -120,6 +121,8 @@ SpriteQueryBuilder.prototype = {
 			paletteSelected: MR('0 0 1 1'),
 			base: MR(0, 0, tocellh(DISPLAY_WIDTH), tocellh(DISPLAY_HEIGHT)),
 			selectChunk: MR('-1 -1 1 1'),
+			loadedSpriteScope: MR('4 4 16 16'),
+			selectPalette: MR('3 21 10 8')
 		};
 		
 		this.rects = {
@@ -147,16 +150,30 @@ SpriteQueryBuilder.prototype = {
 		
 		var self = this, img, size = getBuildCellSize(), bg, putlen;
 		
- 		//スプライトキャンバス
- 		makeScroll('bg1', false);
-		//スプライトパレット
-		makeScroll('bg2', false);
- 		//ウィンドウ　上：スプライトブラシ
-		makeScroll('bg3', false);
+// 		makeScroll('bg1', false);
+//		//スプライトパレット
+//		makeScroll('bg2', false);
+// 		//ウィンドウ　上：スプライトブラシ
+//		makeScroll('bg3', false);
 		//選択中エフェクト
+		
+// 		//スクロール初期化
 		makeCanvasScroll('sprite');
 		makeCanvasScroll('tmp');
 		makeCanvasScroll('screen');
+
+		makeCanvasScroll('bg1');
+		makeCanvasScroll('bg2');
+		makeCanvasScroll('bg3');
+		makeCanvasScroll('sprite');
+		makeCanvasScroll('tmp');
+		makeCanvasScroll('screen');
+		SCROLL = getScrolls();
+		SCROLL.bg1.rasterVolatile = false;
+		SCROLL.bg2.rasterVolatile = false;
+		SCROLL.bg3.rasterVolatile = false;
+		SCROLL.sprite.drawPrimary = false;
+		
 		
 		imageDropFileHandle(scrollByName('screen').canvas, function(img){
 			self.openSpriteImage(img);
@@ -196,10 +213,10 @@ SpriteQueryBuilder.prototype = {
 			self.keyControll.setKey('ext', 16);
 			self.keyControll.setKey('enter', 13);
 			self.keyControll.unsetKey('space');
-			self.keyControll.unsetKey('left');
-			self.keyControll.unsetKey('right');
-			self.keyControll.unsetKey('up');
-			self.keyControll.unsetKey('down');
+//			self.keyControll.unsetKey('left');
+//			self.keyControll.unsetKey('right');
+//			self.keyControll.unsetKey('up');
+//			self.keyControll.unsetKey('down');
 			self.ppControll.init(scrollByName('screen'), scrollByName('bg3'));
 			self.cpControll.init(scrollByName('screen'), scrollByName('bg1'));
 
@@ -379,6 +396,10 @@ SpriteQueryBuilder.prototype = {
 		r = MR(0, 0, tocellh(img.width), tocellh(img.height));
 		this.loadedSprite.cellrect = r;
 		this.isLoaded = true;
+		
+		//キャラチップファイルのポジション
+		this.loadedSpriteCursor = makeCursor('loadedcorpe', this.loadedSprite.cellrect.w - this.cellrects.loadedSpriteScope.w + 1, this.loadedSprite.cellrect.h - this.cellrects.loadedSpriteScope.h + 1, 1);
+		
 		this.drawLoadedImage();
 		
 		this.makeSelectedSprites((r.w * r.h) - 1);
@@ -529,27 +550,35 @@ SpriteQueryBuilder.prototype = {
 			, sel = this.paletteSelect
 			, crect
 			, rect
+			, scopePos
+			, buildCell
 			, tapon, tapoff, flickon, flickoff
 		;
 		tapon = function(item, x, y){
-			sel.start.x = x - r.x;
-			sel.start.y = y - r.y;
+			buildCell = getBuildCellSize();
+			scopePos = self.loadedSpriteCursor.pos;
+			sel.start.x = x - r.x + (scopePos.x * buildCell.w);
+			sel.start.y = y - r.y + (scopePos.y * buildCell.h);
+			
 			sel.end.x = -1;
 			sel.end.y = -1;
 		};
 		
 		tapoff = function(item, x, y){
-				sel.end.x =  x - r.x;
-				sel.end.y =  y - r.y;
-				self.paletteSource = 'image';
-				
-				self.resetSelectedDirection();
-				self.makeSelect(sel.start.x, sel.start.y, sel.end.x, sel.end.y);
-				crect = self.cellrects.paletteSelected;
-				rect = self.loadedSprite.cellrect;
-				self.makeSelectedSprites(crect.x + (crect.y * rect.w));
-				self.drawSelectedSprite();
-				self.drawDirectionButtons();
+			buildCell = getBuildCellSize();
+			scopePos = self.loadedSpriteCursor.pos;
+			sel.end.x =  x - r.x + (scopePos.x * buildCell.w);
+			sel.end.y =  y - r.y + (scopePos.y * buildCell.h);
+			self.paletteSource = 'image';
+
+			self.resetSelectedDirection();
+
+			self.makeSelect(sel.start.x, sel.start.y, sel.end.x, sel.end.y);
+			crect = self.cellrects.paletteSelected;
+			rect = self.loadedSprite.cellrect;
+			self.makeSelectedSprites(crect.x + (crect.y * rect.w));
+			self.drawSelectedSprite();
+			self.drawDirectionButtons();
 		};
 		
 		flickon = function(item, x, y){
@@ -586,7 +615,8 @@ SpriteQueryBuilder.prototype = {
 			DISPLAY_WIDTH
 		])[pat]
 		;
-		this.ease.swing(SCROLL.bg3.x, targetPos, 16);
+//		this.ease.swing(SCROLL.bg3.x, targetPos, 16);
+		this.ease.out(SCROLL.bg3.x, targetPos, 16, 'cubic');
 	},
 	
 	/**	
@@ -806,7 +836,7 @@ SpriteQueryBuilder.prototype = {
 			j++;
 		}
 		q = q.join(';');
-		
+		// TODO 回転情報があるときなどのために指定範囲をクエリ結合して括弧でくくるようなことをするべきか
 		//重複書き込み防止をリセット
 		this.resetRefreshCanvasPos();
 		
@@ -1553,7 +1583,8 @@ SpriteQueryBuilder.prototype = {
 							if(count > 0){
 								qstr = preQuery;
 								qstr = preQuery.length > 1 ? '(' + qstr + ')' : qstr;
-								qstr += SPQ_HMULTI + (count + 1) + SPQ_NEWLINE;
+								// TODO NEWLINEは必要ないか
+								qstr += SPQ_HMULTI + (count + 1);
 								preQuery = [qstr];
 
 								if(preQuery != null){
@@ -1683,9 +1714,12 @@ SpriteQueryBuilder.prototype = {
 		var sprites = this.loadedSprite
 			, bg = SCROLL.bg2
 			, pos = this.margin.loadedSpriteFrame
+			, loadedPos = this.loadedSpriteCursor.pos
+			, brect = getBuildCellSize()
+//				ppos = loadedPos.x + i + ((loadedPos.y + j) * w);
 		;
 		bg.clear(COLOR_BLACK);
-		bg.drawSprite(sprites.full, 0, 0);
+		bg.drawSprite(sprites.full, -loadedPos.x * brect.w, -loadedPos.y * brect.h);
 		
 	},
 	
@@ -1762,8 +1796,12 @@ SpriteQueryBuilder.prototype = {
 	{
 		var bg = SCROLL.bg3
 			, r = this.rects.selectPalette
-			, sl = copyCanvasSprite(convertChunk(this.selectedInfo.sprites))
-			, el = copyCanvasSprite(this.spritesEraser)
+			, cr = this.cellrects.selectPalette
+//			, sl = copyCanvasSprite(convertChunk(this.selectedInfo.sprites))
+//			, el = copyCanvasSprite(this.spritesEraser)
+			, sl = this.selectedInfo.sprites
+			, el = this.spritesEraser
+			, bcell = getBuildCellSize()
 		;
 		if(sl.w > r.w){
 			el.w = r.w;
@@ -1774,9 +1812,14 @@ SpriteQueryBuilder.prototype = {
 			sl.h = r.h;
 		}
 		
+		sl = sl.slice(0, cr.h);
+		sl = sl.map(function(a){
+			return a.slice(0, cr.w);
+		});
+		
 		bg.clear(COLOR_BLACK, r);
-		bg.drawSpriteChunk(this.sprites.blank_SelPalette, r.x, r.y);
-		bg.drawSpriteChunk(el, r.x, r.y);
+		bg.drawSprite(this.sprites.blank_SelPalette, r.x, r.y);
+		bg.clear(COLOR_BLACK, MR(r.x, r.y, sl[0].length * bcell.w, sl.length * bcell.h))
 		bg.drawSpriteChunk(sl, r.x, r.y);
 	},
 	
@@ -1842,6 +1885,7 @@ SpriteQueryBuilder.prototype = {
 				;
 				for(y = 0; y < rect.h; y++){
 					for(x = 0; x < rect.w; x++){
+						if(r1)
 						bg1.drawSprite(r1, cto(rect.x + x), cto(rect.y + y));
 						bg1.drawSprite(r2, cto(rect.x + x), cto(rect.y + y));
 						bg1.drawSprite(r3, cto(rect.x + x), cto(rect.y + y));
@@ -1896,7 +1940,7 @@ SpriteQueryBuilder.prototype = {
 					dfunc(qrect, index + 1);
 					drawnRect.push(qrect);
 				}else{
-					dfunc(qrect, ++colorCount);
+					dfunc(qrect, numFormat(++colorCount, 4));
 					drawnQuery.push(q.query);
 					drawnRect.push(qrect);
 				}
@@ -2076,6 +2120,10 @@ SpriteQueryBuilder.prototype = {
 			, rectlen = rect.h + rect.w + 1
 			, rectxy = rect.x + rect.y
 			, x, y, tdisp = ((this.appClock * (rectlen / 20)) | 0) % rectlen
+			, cr = this.cellrects.loadedSpriteScope
+//			, h = rect.y + rect.h < cr.h ? rect.y + rect.h : cr.h
+			, scope = this.loadedSpriteCursor.pos
+//			, starty = rect.y - scope.y < 0
 			, connect = {u: 0, d: 0, l: 0, r: 0}
 			, s = this.sprites, mode = ''
 			, udlr = {
@@ -2087,7 +2135,13 @@ SpriteQueryBuilder.prototype = {
 			}
 		;
 		for(y = rect.y; y < rect.y + rect.h; y++){
+			if(y - scope.y < 0 || y - scope.y >= cr.h){
+				continue;
+			}
 			for(x = rect.x; x < rect.x + rect.w; x++){
+				if(x - scope.x < 0 || x - scope.x >= cr.w){
+					continue;
+				}
 				mode = false;
 				mode = x + y - rectxy == tdisp ? '' : mode;
 				mode = x + y - rectxy + 1 == tdisp ? 'd1_' : mode;
@@ -2103,7 +2157,7 @@ SpriteQueryBuilder.prototype = {
 				if(udlr[spr] == null){
 					continue;
 				}else{
-					SCROLL.sprite.drawSpriteChunk(s[mode + udlr[spr]], cto(x) + scr.x, cto(y) + scr.y);
+					SCROLL.sprite.drawSpriteChunk(s[mode + udlr[spr]], cto(x - scope.x) + scr.x, cto(y - scope.y) + scr.y);
 				}
 			}
 		}
@@ -2177,9 +2231,23 @@ SpriteQueryBuilder.prototype = {
 	{
 		var cont = this.keyControll
 			, state = cont.getState(['ext'])
-			, trig = cont.getTrig(['select', '>', '<', 'enter'])
-			, hold = cont.getHold(['select', '>', '<'])
+			, trig = cont.getTrig(['select', '>', '<', 'enter', 'left', 'right', 'up', 'down'])
+			, hold = cont.getHold(['select', '>', '<', 'left', 'right', 'up', 'down'])
 		;
+		
+		if(trig.left || hold.left){
+			this.loadedSpriteCursor.left();
+			this.drawLoadedImage();
+		}if(trig.right || hold.right){
+			this.loadedSpriteCursor.right();
+			this.drawLoadedImage();
+		}if(trig.up || hold.up){
+			this.loadedSpriteCursor.up();
+			this.drawLoadedImage();
+		}if(trig.down || hold.down){
+			this.loadedSpriteCursor.down();
+			this.drawLoadedImage();
+		}
 		
 		if(state.ext && (trig['<'] || trig['>'])){
 			this.debugCanvasInfo = (this.debugCanvasInfo + 1) % 4;
